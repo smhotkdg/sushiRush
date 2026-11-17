@@ -1115,8 +1115,7 @@ function showTitle(){
   showCard(`<div class="menu-banner"><h2>모드 선택</h2></div>${tabs}${body}${soundRow()}
     <button class="btn sub small" data-act="reset">${resetArmed?'정말 지울까요? 한 번 더 누르면 초기화':'기록 초기화 (진행·순위)'}</button>
     <button class="btn sub small" data-act="splash">← 타이틀 화면</button>
-    <div class="ver">열린 스테이지 ${Math.min(progress.unlocked,MAX_STAGE)} / ${MAX_STAGE}<br>
-      환영 음성 · AI 가상 배우 <a href="https://typecast.ai/" target="_blank" rel="noopener noreferrer">Typecast 옥지</a></div>`,'menu');
+    <div class="ver">열린 스테이지 ${Math.min(progress.unlocked,MAX_STAGE)} / ${MAX_STAGE}</div>`,'menu');
 }
 // ---- 타이틀 화면 ----
 const splash=document.getElementById('splash'), art=document.getElementById('art'), doors=document.getElementById('doors');
