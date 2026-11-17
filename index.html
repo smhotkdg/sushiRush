@@ -841,6 +841,14 @@ function drawOrder(s,p,cs){
   ctx.restore();
 }
 
+function animateIdle(phase){
+  if(reduceMotion.matches) return;
+  const beat=G.time*2.4+phase;
+  const breath=(1+Math.sin(beat))*0.5;
+  ctx.rotate(Math.sin(beat*0.5)*0.016);
+  ctx.scale(1-breath*0.008,1+breath*0.022);
+}
+
 function drawSeat(i){
   const s=G.seats[i]; if(!s) return;
   const p=L.seat[i], cs=L.cs, dir=p.top?1:-1;
@@ -850,10 +858,13 @@ function drawSeat(i){
   const happy=(s.leaving&&!s.angry)||s.bump>0;
   const angry=s.angry||(s.patMax&&s.pat/s.patMax<0.25);
   const guest=SPR.guests[s.look.guest];
-  const side=cs*1.23;
-  if(!drawArt(guest?.[happy?'happy':angry?'angry':'idle']||guest?.idle,p.x-side/2,y-cs*0.58,side,side)){
-    drawPerson(p.x,y,cs,s.look,{happy,angry});
+  const side=cs*1.23, foot=side-cs*0.58;
+  ctx.save(); ctx.translate(p.x,y+foot);
+  if(s.in>=1&&!s.leaving&&!happy) animateIdle(1.7+i*1.9);
+  if(!drawArt(guest?.[happy?'happy':angry?'angry':'idle']||guest?.idle,-side/2,-side,side,side)){
+    drawPerson(0,-foot,cs,s.look,{happy,angry});
   }
+  ctx.restore();
   if(!s.leaving&&s.orderAt!==undefined) drawOrder(s,p,cs);
   ctx.restore();
 }
@@ -889,10 +900,11 @@ function drawBelt(){
   const stroke=cooking&&!reduceMotion.matches?Math.sin(Math.PI*G.cookTime/COOK_TIME):0;
   const reach=serving&&!reduceMotion.matches?G.chefServe/SERVE_TIME:0;
   const chefSize=Math.min(I.h*1.24,I.w*0.62);
-  const pose=cooking?'cook':G.ready!==null||serving?'serve':'idle';
+  const pose=cooking?'cook':serving?'serve':'idle';
   const chefBottom=I.y+I.h+tw*0.15;
   ctx.save();
   ctx.translate(L.chef.x,chefBottom);
+  if(pose==='idle') animateIdle(0.4);
   ctx.rotate(stroke*0.075+reach*0.10);
   ctx.scale(1+stroke*0.04,1-stroke*0.05);
   if(!drawArt(SPR.chef[pose]||SPR.chef.idle,-chefSize/2,-chefSize,chefSize,chefSize)){
