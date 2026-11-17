@@ -51,6 +51,16 @@
   .pager{align-items:center}.pager .btn{flex:0 0 64px}.pager .pg{flex:1;font-size:16px;margin-top:8px}
   .btn:disabled{opacity:.4;cursor:default}
   .btn.small{font-size:14px;padding:9px 10px}.ver{margin-top:10px;font-size:12px;color:#c4a591}
+  .tabs{display:flex;gap:6px;background:#ffe6d2;border-radius:16px;padding:5px;margin:8px 0 12px}
+  .tabs button{flex:1;border:0;border-radius:12px;padding:9px 4px;font:inherit;font-size:16px;background:transparent;color:#b08a76;cursor:pointer}
+  .tabs button.on{background:#fff;color:var(--accent);box-shadow:0 2px 0 #f1c3a8}
+  .card h3{margin:16px 0 6px;font-size:17px;font-weight:400}
+  .rank{background:#fff;border-radius:14px;padding:4px 10px;font-size:14px;margin-bottom:6px;font-variant-numeric:tabular-nums}
+  .rank>div{display:grid;grid-template-columns:26px 1.3fr 1fr 1.1fr;gap:4px;padding:5px 0;border-bottom:1px dashed #f3dccd;text-align:right}
+  .rank>div:last-child{border-bottom:0}.rank b{font-weight:400;color:var(--accent);text-align:center}
+  .rank .me{background:#fff3c9;border-radius:8px;margin:0 -6px;padding:5px 6px}
+  .rank.empty{padding:14px;color:#c4a591}
+  .score{font-size:46px;color:var(--accent);line-height:1.1;margin:4px 0}.score small{font-size:20px;margin-left:2px}
   .stars{font-size:34px;letter-spacing:4px;margin:2px 0 8px;color:var(--gold);text-shadow:0 2px 0 #e0a100}
 </style>
 </head>
@@ -148,7 +158,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v0.4';
+const VERSION = 'v0.5';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 function stageConfig(n){
   return {
@@ -224,6 +234,26 @@ function solvable(st){
     if(++idle>N*4) return false;                                 // 4바퀴 동안 진전이 없으면 실패
   }
   return true;
+}
+// 무한 모드: 손님 k명째 기준 난이도
+function endlessCfg(k){
+  return { types:Math.min(3+Math.floor(k/6),TYPE_ORDER.length), customers:0, orderMin:3, orderMax:Math.min(4+Math.floor(k/8),8),
+           capacity:18, mix:Math.min(2+k*0.08,6), loop:Math.max(5,11-k*0.04), spawnGap:0.9 };
+}
+const patienceFor=(served,need)=>Math.max(5,42-served*0.3)+need*1.6;   // 손님 인내심(초)
+function refill(){                       // 손님 6명과 그 주문만큼의 재료를 이어 붙인다
+  const cfg=endlessCfg(G.gen), types=TYPE_ORDER.slice(0,cfg.types), runs=[];
+  for(let i=0;i<6;i++){
+    let t; do{ t=pick(types); }while(t===G.lastType); G.lastType=t;
+    const need=rnd(cfg.orderMin,cfg.orderMax); G.queue.push({type:t,need,look:randomLook()});
+    let left=need; while(left>0){ const k=Math.min(left,rnd(1,3)); runs.push({type:t,k,key:i+Math.random()*cfg.mix}); left-=k; }
+  }
+  runs.sort((a,b)=>a.key-b.key);
+  for(const r of runs){
+    const idx=[0,1,2,3,4].sort((a,b)=>G.cols[a].length-G.cols[b].length), c=idx[Math.random()<0.55?0:rnd(1,2)];
+    for(let j=0;j<r.k;j++) G.cols[c].push(r.type);
+  }
+  G.gen+=6;
 }
 function buildVerified(n){
   let st, tries=0;
@@ -390,21 +420,29 @@ function drawParts(){
    6. 게임 상태와 규칙
    ===================================================================== */
 let G=null;
-function startStage(n){
-  const st=buildVerified(n);
+function startStage(n,endless){
+  const st=endless?{cfg:endlessCfg(0),cols:Array.from({length:COLS},()=>[]),queue:[],total:0,tries:0,verified:false}:buildVerified(n);
   G={ tries:st.tries, verified:st.verified, stage:n, cfg:st.cfg, cols:st.cols, colShift:Array(COLS).fill(0), colFlash:Array(COLS).fill(0),
       queue:st.queue, total:st.total, delivered:0,
       seats:[null,null,null,null], seatTimer:[0.3,0.9,1.5,2.1],
       slots:Array(st.cfg.capacity).fill(null), offset:0,     // offset: 벨트 회전량(0~1)
       pending:[], flying:[], fx:[], parts:[], danger:0, warned:-1, state:'play', time:0, endT:0, chefBusy:0, barShake:0,
       shake:0, combo:0, lastServe:-9, confT:0, tapped:false };
+  if(endless){ Object.assign(G,{endless:true,lives:3,score:0,served:0,gen:0,lastType:null,hudKey:''}); refill(); }
   document.getElementById('stageLabel').textContent='STAGE '+n;
+  document.querySelector('#progress .chk').textContent=endless?'★':'✓';
   hideOverlay(); updateHud();
 }
 const RUSH=5;          // 재료를 다 보낸 뒤 빨리 감기 배속
 const DANGER_TIME=3;   // 벨트가 가득 찬 채로 버틸 수 있는 시간(초)
 function count(){ let c=G.pending.length+G.flying.length; for(const s of G.slots) if(s) c++; return c; }
-function updateHud(){ document.getElementById('progText').textContent=G.delivered+'/'+G.total; }
+const fmtTime=t=>Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');
+function updateHud(){
+  if(G.endless){
+    document.getElementById('progText').textContent=G.score.toLocaleString();
+    document.getElementById('stageLabel').textContent='♥'.repeat(Math.max(0,G.lives))+'♡'.repeat(3-Math.max(0,G.lives))+' '+fmtTime(G.time);
+  } else document.getElementById('progText').textContent=G.delivered+'/'+G.total;
+}
 
 // 줄을 터치하면 맨 위 재료 "1개"만 주방장에게 넘어간다
 function tapColumn(c){
@@ -429,6 +467,10 @@ function update(dt){
     if(G.state==='clear'){ G.confT-=dt; if(G.confT<=0){ G.confT=0.09; burst(Math.random()*W,-10,5,{shape:'rect',speed:90,g:420,life:1.6,size:9}); } }
     G.endT-=dt; if(G.endT<=0&&!overlayShown()) showResult(); return;
   }
+  if(G.endless){
+    G.cfg.loop=endlessCfg(G.served).loop; if(G.queue.length<4) refill();
+    const key=G.score+'|'+Math.floor(G.time)+'|'+G.lives; if(key!==G.hudKey){ G.hudKey=key; updateHud(); }
+  }
   // 재료가 주방장에게 날아감
   for(const f of G.flying) f.t+=dt/f.dur;
   while(G.flying.length&&G.flying[0].t>=1){
@@ -436,14 +478,24 @@ function update(dt){
     burst(L.prep.x,L.prep.y,3,{shape:'star',colors:['#fff','#ffe066'],speed:120,size:6,life:0.35,up:60});
   }
   // 재료를 모두 보냈으면 남은 진행을 빨리 감는다
-  const rush=G.cols.every(c=>!c.length)&&!G.flying.length, RX=rush?RUSH:1;
+  const rush=!G.endless&&G.cols.every(c=>!c.length)&&!G.flying.length, RX=rush?RUSH:1;
   if(rush&&!G.rush){ G.rush=true; floatText(W/2,L.barY-L.cs*0.4,'재료 끝!','#ff7a8a',24); }
   // 손님 등장 / 퇴장
   for(let i=0;i<4;i++){
     const s=G.seats[i];
-    if(!s){ if(G.queue.length){ G.seatTimer[i]-=dt*RX; if(G.seatTimer[i]<=0){ const c=G.queue.shift(); G.seats[i]={type:c.type,need:c.need,look:c.look,in:0,out:0,leaving:false,bump:0,rang:false}; } } continue; }
+    if(!s){ if(G.queue.length){ G.seatTimer[i]-=dt*RX; if(G.seatTimer[i]<=0){ const c=G.queue.shift(); G.seats[i]={type:c.type,need:c.need,look:c.look,in:0,out:0,leaving:false,bump:0,rang:false}; if(G.endless){ const n=G.seats[i]; n.patMax=n.pat=patienceFor(G.served,c.need); } } } continue; }
     s.in=Math.min(1,s.in+dt*3.5*RX); s.bump=Math.max(0,s.bump-dt*4);
     if(s.in>=1&&!s.rang){ s.rang=true; sfx.arrive(); ring(L.seat[i].bx,L.seat[i].y,L.cs*0.8,'#7ec8e3'); }
+    if(G.endless&&s.in>=1&&!s.leaving){              // 무한 모드: 기다리다 지치면 떠난다
+      s.pat-=dt;
+      if(s.pat<=0){
+        s.leaving=true; s.angry=true; G.lives--; G.shake=0.3; sfx.deny();
+        G.queue.unshift({type:s.type,need:s.need,look:s.look});          // 남은 주문은 나중에 다시 온다
+        floatText(L.seat[i].x,L.seat[i].top?L.seat[i].y+L.cs*0.9:L.seat[i].y-L.cs*0.75,'너무 늦어요…','#7f86b3',20);
+        burst(L.seat[i].x,L.seat[i].y,8,{colors:['#9aa0c8','#c9cde6'],speed:120,size:7,life:0.6});
+        if(G.lives<=0){ G.state='fail'; G.failReason='lives'; G.endT=1.0; G.shake=0.6; sfx.fail(); updateHud(); return; }
+      }
+    }
     if(s.leaving){ s.out+=dt*1.6*RX; if(s.out>=1){ G.seats[i]=null; G.seatTimer[i]=G.cfg.spawnGap; } }
   }
   // 벨트 회전: 접시(slot)가 입구를 지나면 초밥을 올리고, 손님 앞을 지나면 손님이 가져감
@@ -467,10 +519,11 @@ function update(dt){
         G.fx.push({kind:'fly',type:it.type,x0:p.x,y0:p.y,x1:se.bx,y1:se.y,t:0,dur:0.28});
         G.slots[i]=null; s.need--; s.bump=1; G.delivered++; updateHud();
         G.combo=(G.time-G.lastServe<1.6)?G.combo+1:1; G.lastServe=G.time;
+        if(G.endless) G.score+=10+Math.min(G.combo-1,10)*2;
         burst(p.x,p.y,5,{shape:'star',colors:['#ffc83d','#fff','#ff7a8a'],speed:120,size:7,life:0.45});
         floatText(se.bx,se.top?se.y+L.cs*0.75:se.y-L.cs*0.5,G.combo>1?`콤보 x${G.combo}`:'+1',G.combo>1?'#ff7a8a':'#5cc97b',G.combo>1?20:18);
         if(s.need===0){
-          s.leaving=true; sfx.done();
+          s.leaving=true; sfx.done(); if(G.endless){ G.score+=50; G.served++; }
           burst(se.x,se.y,12,{shape:'heart',colors:['#ff7a8a','#ff9bb5','#ffc83d'],speed:170,size:8,life:0.8,up:90});
           floatText(se.x,se.top?se.y+L.cs*0.9:se.y-L.cs*0.75,pick(['냠냠!','맛있어요!','최고!','또 올게요!']),'#ff7a8a',22);
         } else sfx.serve(G.combo);
@@ -480,7 +533,7 @@ function update(dt){
   }
   }
   // 승패 판정
-  if(G.delivered>=G.total){ G.state='clear'; G.endT=G.rush?1.0:1.7; sfx.clear();
+  if(!G.endless&&G.delivered>=G.total){ G.state='clear'; G.endT=G.rush?1.0:1.7; sfx.clear();
     for(let i=0;i<5;i++) burst(W*(0.15+i*0.175),L.playTop+(L.playBot-L.playTop)*0.5,10,{shape:i%2?'star':'rect',speed:260,size:9,life:1.1,up:160});
     progress.unlocked=Math.max(progress.unlocked,Math.min(MAX_STAGE,G.stage+1));
     progress.best=progress.best||{}; const bt=Math.round(G.time*10)/10; G.newBest=!progress.best[G.stage]||bt<progress.best[G.stage];
@@ -488,7 +541,7 @@ function update(dt){
   if(count()>=G.cfg.capacity){
     G.danger+=dt;
     const sec=Math.floor(G.danger); if(sec!==G.warned){ G.warned=sec; sfx.warn(); G.shake=0.18; }
-    if(G.danger>=DANGER_TIME){ G.state='fail'; G.endT=0.9; G.shake=0.6; sfx.fail(); }
+    if(G.danger>=DANGER_TIME){ G.state='fail'; G.failReason='full'; G.endT=0.9; G.shake=0.6; sfx.fail(); }
   } else { G.danger=0; G.warned=-1; }
 }
 
@@ -525,7 +578,10 @@ function drawPerson(x,y,s,look,o={}){
   else { for(const d of [-1,1]){ ctx.fillStyle=INK; oval(x+d*ex,ey,r*0.13,r*0.175); ctx.fill();
       ctx.fillStyle='#fff'; circle(x+d*ex-r*0.04,ey-r*0.07,r*0.055); ctx.fill(); } }
   ctx.fillStyle='rgba(255,120,140,.5)'; oval(x-r*0.66,y+r*0.42,r*0.18,r*0.11); ctx.fill(); oval(x+r*0.66,y+r*0.42,r*0.18,r*0.11); ctx.fill();
-  if(o.happy){ ctx.fillStyle='#e2556a'; ctx.beginPath(); ctx.arc(x,y+r*0.38,r*0.2,0,Math.PI); ctx.closePath(); ctx.fill(); }
+  if(o.angry&&!o.happy){ ctx.strokeStyle=INK; ctx.lineWidth=Math.max(1.4,r*0.1);
+    for(const d of [-1,1]){ ctx.beginPath(); ctx.moveTo(x+d*r*0.58,ey-r*0.34); ctx.lineTo(x+d*r*0.24,ey-r*0.22); ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(x,y+r*0.5,r*0.14,Math.PI*1.15,Math.PI*1.85); ctx.stroke(); }
+  else if(o.happy){ ctx.fillStyle='#e2556a'; ctx.beginPath(); ctx.arc(x,y+r*0.38,r*0.2,0,Math.PI); ctx.closePath(); ctx.fill(); }
   else { ctx.strokeStyle=INK; ctx.lineWidth=Math.max(1.2,r*0.085); ctx.beginPath(); ctx.arc(x,y+r*0.34,r*0.13,Math.PI*0.12,Math.PI*0.88); ctx.stroke(); }
 }
 
@@ -535,13 +591,16 @@ function drawSeat(i){
   const k=s.leaving?1-easeOut(Math.min(1,s.out)):easeOut(s.in);
   ctx.save(); ctx.globalAlpha=clamp(k*1.4,0,1);
   const y=p.y+dir*(1-k)*cs*0.7 - Math.sin(s.bump*Math.PI)*cs*0.07;
-  drawPerson(p.x,y,cs,s.look,{happy:s.leaving||s.bump>0});
+  drawPerson(p.x,y,cs,s.look,{happy:(s.leaving&&!s.angry)||s.bump>0,angry:s.angry||(s.patMax&&s.pat/s.patMax<0.25)});
   if(!s.leaving&&s.in>=1){                       // 말풍선
     const br=cs*0.44, bx=p.bx, by=p.y-cs*0.05, sc=1+s.bump*0.14, d=p.x>bx?1:-1;
     ctx.fillStyle='#fff'; ctx.strokeStyle='#f4b9a6'; ctx.lineWidth=3; ctx.lineJoin='round';
     const tx=bx+d*br*0.75;
     ctx.beginPath(); ctx.moveTo(tx,by+br*0.2); ctx.lineTo(tx+d*br*0.6,by+br*0.75); ctx.lineTo(tx-d*br*0.3,by+br*0.75); ctx.closePath(); ctx.fill(); ctx.stroke();
     circle(bx,by,br*sc); ctx.fill(); ctx.stroke();
+    if(s.patMax){ const f=clamp(s.pat/s.patMax,0,1);      // 인내심 링
+      ctx.strokeStyle=f>0.5?'#5cc97b':f>0.25?'#ffa155':'#ff5a5a'; ctx.lineWidth=cs*0.075; ctx.lineCap='round';
+      ctx.beginPath(); ctx.arc(bx,by,br*sc,-Math.PI/2,-Math.PI/2+Math.PI*2*f); ctx.stroke(); }
     sprite(SPR.sushi[s.type],bx,by-br*0.06,br*1.55*sc);
     const nr=br*0.44; ctx.fillStyle='#ff7a8a'; ctx.strokeStyle='#fff'; ctx.lineWidth=2.5; circle(bx+br*0.62,by+br*0.62,nr); ctx.fill(); ctx.stroke();
     ctx.fillStyle='#fff'; ctx.font=`${nr*1.5}px ${FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -672,23 +731,46 @@ function hideOverlay(){ overlay.classList.remove('show'); }
 function showCard(html){ card.innerHTML=html; overlay.classList.add('show'); }
 const soundRow=()=>`<div class="row"><button class="btn sub" data-act="sfx">효과음 ${progress.sfxOff?'꺼짐':'켜짐'}</button><button class="btn sub" data-act="bgm">배경음 ${progress.bgmOff?'꺼짐':'켜짐'}</button></div>`;
 let titlePage=-1, resetArmed=false;
+function rankTable(mark){
+  const r=progress.rank||[];
+  if(!r.length) return '<div class="rank empty">아직 기록이 없어요</div>';
+  return '<div class="rank">'+r.map((e,i)=>`<div class="${e===mark?'me':''}"><b>${i+1}</b><span>${e.s.toLocaleString()}점</span><span>${fmtTime(e.t)}</span><span>손님 ${e.n}</span></div>`).join('')+'</div>';
+}
 function showTitle(){
-  const pages=Math.ceil(MAX_STAGE/PAGE);
-  if(titlePage<0) titlePage=Math.floor((Math.min(progress.unlocked,MAX_STAGE)-1)/PAGE);
-  titlePage=clamp(titlePage,0,pages-1);
-  const from=titlePage*PAGE+1, to=Math.min(MAX_STAGE,from+PAGE-1);
-  let g=''; for(let i=from;i<=to;i++) g+=`<button data-stage="${i}" class="${(i<=(progress.cleared||0)||i<progress.unlocked)?'done':''}" ${i>progress.unlocked?'disabled':''}>${i}</button>`;
-  showCard(`<h1>스시 러시</h1><p>재료를 하나씩 터치해 초밥을 만들고, 벨트가 가득 차기 전에 손님 주문을 모두 채우세요.</p><div class="grid">${g}</div>
-    <div class="row pager"><button class="btn sub" data-act="prev" ${titlePage<=0?'disabled':''}>◀</button><div class="pg">${from}–${to} / ${MAX_STAGE}</div><button class="btn sub" data-act="nextpage" ${titlePage>=pages-1?'disabled':''}>▶</button></div>${soundRow()}
-    <button class="btn sub small" data-act="reset">${resetArmed?'정말 지울까요? 한 번 더 누르면 초기화':'진행 기록 초기화'}</button>
+  const tab=progress.tab==='endless'?'endless':'stage';
+  const tabs=`<div class="tabs"><button data-act="tab-stage" class="${tab==='stage'?'on':''}">스테이지</button><button data-act="tab-endless" class="${tab==='endless'?'on':''}">무한 모드</button></div>`;
+  let body;
+  if(tab==='stage'){
+    const pages=Math.ceil(MAX_STAGE/PAGE);
+    if(titlePage<0) titlePage=Math.floor((Math.min(progress.unlocked,MAX_STAGE)-1)/PAGE);
+    titlePage=clamp(titlePage,0,pages-1);
+    const from=titlePage*PAGE+1, to=Math.min(MAX_STAGE,from+PAGE-1);
+    let g=''; for(let i=from;i<=to;i++) g+=`<button data-stage="${i}" class="${(i<=(progress.cleared||0)||i<progress.unlocked)?'done':''}" ${i>progress.unlocked?'disabled':''}>${i}</button>`;
+    body=`<p>재료를 하나씩 터치해 초밥을 만들고, 벨트가 가득 차기 전에 손님 주문을 모두 채우세요.</p><div class="grid">${g}</div>
+      <div class="row pager"><button class="btn sub" data-act="prev" ${titlePage<=0?'disabled':''}>◀</button><div class="pg">${from}–${to} / ${MAX_STAGE}</div><button class="btn sub" data-act="nextpage" ${titlePage>=pages-1?'disabled':''}>▶</button></div>`;
+  }else{
+    body=`<p>손님이 끝없이 찾아와요. 기다리다 지친 손님이 떠나면 ♥를 잃고, ♥ 3개를 다 잃거나 벨트가 가득 차면 끝나요.</p>
+      <button class="btn" data-act="endless">무한 모드 시작</button><h3>내 순위 TOP 10</h3>${rankTable()}`;
+  }
+  showCard(`<h1>스시 러시</h1>${tabs}${body}${soundRow()}
+    <button class="btn sub small" data-act="reset">${resetArmed?'정말 지울까요? 한 번 더 누르면 초기화':'기록 초기화 (진행·순위)'}</button>
     <div class="ver">${VERSION} · 열린 스테이지 ${Math.min(progress.unlocked,MAX_STAGE)} / ${MAX_STAGE}</div>`);
 }
 function showPause(){
-  showCard(`<h2>잠시 멈춤</h2><p>STAGE ${G.stage} · ${G.delivered}/${G.total}</p>
+  showCard(`<h2>잠시 멈춤</h2><p>${G.endless?`무한 모드 · ${G.score.toLocaleString()}점 · ${fmtTime(G.time)}`:`STAGE ${G.stage} · ${G.delivered}/${G.total}`}</p>
     <button class="btn" data-act="resume">계속하기</button><button class="btn sub" data-act="retry">다시 시작</button>${soundRow()}
     <button class="btn sub" data-act="title">스테이지 선택</button>`);
 }
 function showResult(){
+  if(G.endless){
+    if(!G.entry){ G.entry={s:G.score,t:Math.floor(G.time),n:G.served,d:Date.now()};
+      progress.rank=(progress.rank||[]).concat(G.entry).sort((a,b)=>b.s-a.s||b.t-a.t).slice(0,10); save.set(progress); }
+    const pos=progress.rank.indexOf(G.entry)+1;
+    return showCard(`<h2>${G.failReason==='lives'?'손님을 너무 많이 놓쳤어요':'벨트가 가득 찼어요'}</h2>
+      <div class="score">${G.score.toLocaleString()}<small>점</small></div>
+      <p>생존 ${fmtTime(G.time)} · 손님 ${G.served}명 · ${pos?`<b>${pos}위</b>${pos===1?' 최고 기록!':''}`:'순위권 밖'}</p>${rankTable(G.entry)}
+      <button class="btn" data-act="retry">다시 도전</button><button class="btn sub" data-act="title">모드 선택</button>`);
+  }
   if(G.state==='clear'){
     const last=G.stage>=MAX_STAGE;
     showCard(`<div class="stars">★ ★ ★</div><h2>STAGE ${G.stage} 클리어!</h2><p>손님 ${G.cfg.customers}명에게 초밥 ${G.total}개를 대접했어요.<br>기록 ${G.time.toFixed(1)}초${G.newBest?' · 최고 기록!':` · 최고 ${progress.best[G.stage]}초`}</p>
@@ -704,12 +786,14 @@ card.addEventListener('click',e=>{
   const a=b.dataset.act; if(a!=='reset') resetArmed=false;
   const refresh=()=>(G&&G.state==='pause')?showPause():showTitle();
   if(a==='resume'){ G.state='play'; hideOverlay(); }
-  else if(a==='retry') startStage(G.stage);
+  else if(a==='retry') startStage(G.stage,G.endless);
+  else if(a==='endless') startStage(0,true);
+  else if(a==='tab-stage'||a==='tab-endless'){ progress.tab=a.slice(4); save.set(progress); showTitle(); }
   else if(a==='next') startStage(G.stage+1);
   else if(a==='title'){ G=null; titlePage=-1; showTitle(); }
   else if(a==='reset'){
     if(!resetArmed){ resetArmed=true; showTitle(); }
-    else { resetArmed=false; progress={unlocked:1,cleared:0,best:{},sfxOff:progress.sfxOff,bgmOff:progress.bgmOff}; save.set(progress); titlePage=0; showTitle(); }
+    else { resetArmed=false; progress={unlocked:1,cleared:0,best:{},rank:[],tab:progress.tab,sfxOff:progress.sfxOff,bgmOff:progress.bgmOff}; save.set(progress); titlePage=0; showTitle(); }
   }
   else if(a==='prev'){ titlePage--; showTitle(); }
   else if(a==='nextpage'){ titlePage++; showTitle(); }
