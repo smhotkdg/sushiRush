@@ -286,7 +286,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.0';
+const VERSION = 'v1.0.1';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -680,6 +680,7 @@ function drawParts(){
    ===================================================================== */
 let G=null;
 function startStage(n,endless){
+  hideSplash();
   const st=endless?{cfg:endlessCfg(0),cols:Array.from({length:COLS},()=>[]),queue:[],total:0,tries:0,verified:false}:buildVerified(n);
   G={ tries:st.tries, verified:st.verified, stage:n, cfg:st.cfg, cols:st.cols, colShift:Array(COLS).fill(0), colFlash:Array(COLS).fill(0),
       queue:st.queue, total:st.total, delivered:0,
@@ -1128,6 +1129,7 @@ const soundRow=()=>`<div class="row"><button class="btn sub" data-act="sfx">효�
 let titlePage=-1, resetArmed=false;
 function showTitle(){
   document.getElementById('hud').hidden=true;
+  hideSplash();
   const tab=progress.tab==='endless'?'endless':'stage';
   const tabs=`<div class="tabs"><button data-act="tab-stage" class="${tab==='stage'?'on':''}">스테이지</button><button data-act="tab-endless" class="${tab==='endless'?'on':''}">무한 모드</button></div>`;
   let body;
@@ -1166,6 +1168,7 @@ function placeArt(){                      // 이미지를 화면에 맞추되 �
     b.style.cssText=`left:${Math.random()*100}%;width:${sz}px;height:${sz*0.8}px;--sway:${(Math.random()*120-60).toFixed(0)}px;animation-duration:${(6+Math.random()*6).toFixed(1)}s;animation-delay:${(-Math.random()*12).toFixed(1)}s`;
     box.appendChild(b); }
 })();
+function hideSplash(){ const sp=document.getElementById('splash'); if(sp){ sp.style.display='none'; sp.classList.remove('go'); } splashBusy=false; }
 function showSplash(){
   document.getElementById('hud').hidden=true;
   G=null; hideOverlay(); splash.classList.remove('go'); splash.style.display=''; uiScreen='splash'; splashBusy=false;
