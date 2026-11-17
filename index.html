@@ -379,7 +379,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.3.2';
+const VERSION = 'v1.3.3';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1203,7 +1203,8 @@ function drawPerson(x,y,s,look,o={}){
 }
 
 function drawOrder(s,p,cs){
-  const r=cs*0.44, x=p.bx, y=p.y-cs*0.05, dir=p.x>x?1:-1;
+  const r=cs*0.44, dir=p.x>p.bx?1:-1, B=orderBox(p,cs);
+  const x=p.bx, y=clamp(p.y-cs*0.05,B.minY+r*1.15,B.maxY-r*1.05);
   const t=reduceMotion.matches?1:clamp((G.time-s.orderAt)/0.28,0,1);
   const scale=1-0.26*(1-t)**2+0.18*Math.sin(Math.PI*t)*(1-t);
   if(s.items.length>=2) return drawOrderCard(s,p,cs,t,scale);       // 2~3종은 세로 주문표
@@ -1254,14 +1255,25 @@ function drawOrder(s,p,cs){
 }
 
 // 2~3종 주문표: 한 줄에 초밥 하나와 큰 "×N". 화면 밖으로 나가지 않게 가로 위치를 맞춘다.
+// 주문표가 들어갈 빈 칸: 위쪽 손님은 HUD 아래~벨트 테두리, 아래쪽 손님은 벨트 테두리~게이지 위.
+// 가로는 화면 가장자리~손님 몸 옆. 넘치면 통째로 줄여서 어떤 것과도 겹치지 않게 한다.
+function orderBox(p,cs){
+  const rim=L.tw*0.35;
+  const minY=p.top?L.playTop+3:L.by1-rim, maxY=p.top?L.by0+rim:L.barY-4;
+  const left=p.x>p.bx, body=cs*0.40;
+  const minX=left?3:p.x+body, maxX=left?p.x-body:W-3;
+  return {minY,maxY,minX,maxX,left};
+}
 function drawOrderCard(s,p,cs,t,scale){
-  const r=cs*0.44, items=s.items, n=items.length, rowH=r*0.86, cw=r*1.9;
+  const r=cs*0.44, items=s.items, n=items.length, rowH=r*0.86, cw=r*1.9, tail=r*0.32;
   const hasPatience=s.patMax>0, ch=n*rowH+r*0.24+(hasPatience?r*0.3:0);
-  const dir=p.x>p.bx?1:-1;
-  const x=clamp(p.bx,cw/2+4,W-cw/2-4), y=p.y-cs*0.05;
+  const dir=p.x>p.bx?1:-1, B=orderBox(p,cs);
+  const fit=Math.min(1,(B.maxY-B.minY)/ch,(B.maxX-B.minX)/(cw+tail));
+  const x=B.left?B.maxX-(tail+cw/2)*fit:B.minX+(tail+cw/2)*fit;
+  const y=clamp(p.y-cs*0.05,B.minY+ch*fit/2,B.maxY-ch*fit/2);
   ctx.save();
   ctx.globalAlpha*=0.65+t*0.35;
-  ctx.translate(x,y); ctx.scale(scale,scale);
+  ctx.translate(x,y); ctx.scale(scale*fit,scale*fit);
   const left=-cw/2, top=-ch/2;
   ctx.fillStyle='rgba(60,30,20,.25)'; rr(ctx,left,top+3,cw,ch,r*0.28); ctx.fill();
   // 꼬리
@@ -1316,8 +1328,12 @@ function drawSeat(i){
   if(!drawArt(portrait||guest?.idle,p.x-side/2,y-cs*0.58,side,side)){
     drawPerson(p.x,y,cs,s.look,{happy,angry});
   }
-  if(!s.leaving&&s.orderAt!==undefined) drawOrder(s,p,cs);
   ctx.restore();
+}
+function drawSeatOrder(i){
+  const s=G.seats[i]; if(!s||s.leaving||s.orderAt===undefined) return;
+  const p=L.seat[i], k=easeOut(s.in);
+  ctx.save(); ctx.globalAlpha=clamp(k*1.4,0,1); drawOrder(s,p,L.cs); ctx.restore();
 }
 
 function drawBelt(){
@@ -1473,6 +1489,7 @@ function draw(){
   drawSeat(2); drawSeat(3);            // 아래쪽 손님은 벨트 앞
   ctx.restore();
   drawBar(); drawBoard();
+  for(let i=0;i<4;i++) drawSeatOrder(i);   // 주문은 항상 맨 위(벨트·손님·고양이에 가리지 않게)
   for(const f of G.flying){ const e=easeOut(Math.min(1,f.t));     // 날아가는 재료
     const x=f.x0+(L.prep.x-f.x0)*e, y=f.y0+(L.prep.y-f.y0)*e-Math.sin(e*Math.PI)*L.cs*0.6;
     ctx.save(); ctx.translate(x,y); ctx.rotate(e*Math.PI*2); sprite(SPR.ing[f.type],0,0,L.item*(1.15-0.35*e)); ctx.restore(); }
