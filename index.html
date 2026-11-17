@@ -7,6 +7,7 @@
 <title>규리네 초밥은 못 참지</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="assets/menu-background.webp" fetchpriority="low">
 <style>
   :root{ --ink:#6b3f2a; --bg:#ffe8d6; --cream:#fffaf0; --accent:#ff7a8a; --accentD:#e25a6c; --green:#5cc97b; --gold:#ffc83d; }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -39,7 +40,7 @@
   #overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
     background:rgba(49,28,30,.64);padding:clamp(12px,4vw,22px);z-index:5}
   #overlay.show{display:flex}
-  #overlay[data-view="menu"]{background:linear-gradient(#30223acc,#3c2626e6),url('assets/title.webp') center/cover}
+  #overlay[data-view="menu"]{background:linear-gradient(#2a1d3170,#382222a0),url('assets/menu-background.webp') center/cover,#4e3330}
   .card{width:100%;max-width:390px;max-height:100%;overflow:auto;color:#512b24;
     background:linear-gradient(150deg,#fff6e2,#f6e3bc);border:2px solid #dda565;border-radius:20px;
     padding:17px clamp(12px,4vw,20px);text-align:center;box-shadow:0 5px 0 #7b452c,0 14px 34px #24151ba8}
