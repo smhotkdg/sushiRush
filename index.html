@@ -168,8 +168,8 @@
    ===================================================================== */
 const ASSET_ROOT = 'assets/restaurant/';
 const ASSET_URLS = {};
-const CHEF_STATES = ['idle','cook','serve'];
-const GUEST_STATES = ['idle','angry','happy'];
+const CHEF_STATES = ['idle','blink','cook','serve'];
+const GUEST_STATES = ['idle','blink','angry','happy'];
 const GUESTS = ['calico','rabbit','shiba','tuxedo'];
 const UI_PARTS = ['belt','kitchen','board','bubble','badge','progress'];
 const SLAB = 'M8 40C8 28 17 20 30 18L48 15C58 14 61 23 57 32C53 43 43 49 30 50L16 51C10 51 8 46 8 40Z';
@@ -395,33 +395,38 @@ function buildVerified(n){
 const save={ get(){ try{ return JSON.parse(localStorage.getItem('sushi-rush')||'{}'); }catch(e){ return {}; } },
              set(o){ try{ localStorage.setItem('sushi-rush',JSON.stringify(o)); }catch(e){} } };
 let progress=Object.assign({unlocked:1,sfxOff:false,bgmOff:false},save.get());
-const A={ctx:null,noise:null,welcome:null,next:0,step:0};
-const welcomeBytes=fetch('assets/welcome.mp3?v=okji-1.3')
+const A={ctx:null,noise:null,welcome:null,gameMusic:null,gameMusicOn:false,next:0,step:0};
+const menuMusic={load:null,buffer:null,source:null,gain:null,offset:0,startedAt:0};
+// menu-loop.mp3의 끝은 이 시점 직전으로 이어지도록 크로스페이드했다.
+const MENU_LOOP_START=5.82;
+const welcomeBytes=fetch('assets/welcome.mp3?v=5f6af27')
   .then(response=>response.ok?response.arrayBuffer():null)
   .catch(()=>null);
 function ac(){
   try{
     if(!A.ctx){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; A.ctx=new C();
       const b=A.ctx.createBuffer(1,Math.floor(A.ctx.sampleRate*0.3),A.ctx.sampleRate), d=b.getChannelData(0);
-      for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; A.noise=b; }
+      for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; A.noise=b;
+      A.gameMusic=A.ctx.createGain(); A.gameMusic.gain.value=0;
+      A.gameMusic.connect(A.ctx.destination); }
     if(A.ctx.state==='suspended') A.ctx.resume().catch(()=>{});
     return A.ctx;
   }catch(e){ return null; }
 }
-function tone(f,d=0.09,type='triangle',v=0.09,slide=0,at=0){
+function tone(f,d=0.09,type='triangle',v=0.09,slide=0,at=0,out=null){
   const c=ac(); if(!c) return;
   try{ const o=c.createOscillator(), g=c.createGain(), t=at||c.currentTime;
     o.type=type; o.frequency.setValueAtTime(f,t); if(slide) o.frequency.exponentialRampToValueAtTime(f*slide,t+d);
     g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(v,t+0.008); g.gain.exponentialRampToValueAtTime(0.0008,t+d);
-    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+d+0.03);
+    o.connect(g); g.connect(out||c.destination); o.start(t); o.stop(t+d+0.03);
   }catch(e){}
 }
-function hiss(d=0.06,v=0.06,freq=3000,at=0){
+function hiss(d=0.06,v=0.06,freq=3000,at=0,out=null){
   const c=ac(); if(!c||!A.noise) return;
   try{ const s=c.createBufferSource(), f=c.createBiquadFilter(), g=c.createGain(), t=at||c.currentTime;
     s.buffer=A.noise; f.type='bandpass'; f.frequency.value=freq; f.Q.value=0.8;
     g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.0008,t+d);
-    s.connect(f); f.connect(g); g.connect(c.destination); s.start(t); s.stop(t+d+0.02);
+    s.connect(f); f.connect(g); g.connect(out||c.destination); s.start(t); s.stop(t+d+0.02);
   }catch(e){}
 }
 const S=fn=>(...a)=>{ if(!progress.sfxOff) fn(...a); };
@@ -453,6 +458,37 @@ const sfx={
   clear: S(()=>seq([523,659,784,1047,784,1047,1319],.2,'triangle',.1,.11)),
   fail:  S(()=>seq([392,330,262,196],.28,'sawtooth',.05,.16)),
 };
+function syncMenuMusic(){
+  const c=A.ctx, m=menuMusic;
+  if(!c) return;
+  const want=!G&&!progress.bgmOff&&!document.hidden;
+  if(!want){
+    if(!m.source) return;
+    const end=c.currentTime+0.045;
+    const position=m.offset+end-m.startedAt;
+    m.offset=position<m.buffer.duration?position:
+      MENU_LOOP_START+(position-MENU_LOOP_START)%(m.buffer.duration-MENU_LOOP_START);
+    m.gain.gain.setTargetAtTime(0,c.currentTime,0.009);
+    m.source.stop(end); m.source=null;
+    return;
+  }
+  if(!m.load){
+    m.load=fetch('assets/menu-loop.mp3')
+      .then(response=>{ if(!response.ok) throw new Error('Menu audio unavailable'); return response.arrayBuffer(); })
+      .then(bytes=>c.decodeAudioData(bytes))
+      .then(buffer=>{ if(buffer.duration>MENU_LOOP_START) m.buffer=buffer; })
+      .catch(()=>{});
+  }
+  if(!m.buffer||m.source) return;
+  const source=c.createBufferSource(), gain=c.createGain();
+  source.buffer=m.buffer; source.loop=true; source.loopStart=MENU_LOOP_START;
+  source.connect(gain); gain.connect(c.destination);
+  source.onended=()=>{ source.disconnect(); gain.disconnect(); };
+  gain.gain.value=0; gain.gain.setTargetAtTime(0.24,c.currentTime,0.04);
+  m.startedAt=c.currentTime;
+  source.start(m.startedAt,m.offset);
+  m.source=source; m.gain=gain;
+}
 // 배경음: 8분음 단위 시퀀서 (C 장조 5음계)
 const N={C3:130.8,F2:87.3,G2:98,A2:110,C5:523.3,D5:587.3,E5:659.3,G5:784,A5:880,C6:1046.5};
 const MEL=['E5',0,'G5','E5','D5',0,'C5',0,'D5','E5','G5',0,'A5',0,'G5',0,'E5',0,'G5','A5','C6',0,'A5',0,'G5','E5','D5',0,'C5',0,0,0,
@@ -460,14 +496,19 @@ const MEL=['E5',0,'G5','E5','D5',0,'C5',0,'D5','E5','G5',0,'A5',0,'G5',0,'E5',0,
 const BASS=['C3','A2','F2','G2','F2','C3','G2','C3'];
 const STEP=0.19;
 setInterval(()=>{
+  syncMenuMusic();
   const playing=G&&G.state==='play'&&!progress.bgmOff&&!document.hidden;
+  if(A.gameMusic&&Boolean(playing)!==A.gameMusicOn){
+    A.gameMusicOn=Boolean(playing);
+    A.gameMusic.gain.setTargetAtTime(playing?1:0,A.ctx.currentTime,0.012);
+  }
   if(!playing||!A.ctx){ A.next=0; return; }
   const c=A.ctx; if(A.next<c.currentTime) A.next=c.currentTime+0.06;
   while(A.next<c.currentTime+0.35){
     const i=A.step%MEL.length, m=MEL[i];
-    if(m) tone(N[m],STEP*1.7,'triangle',.038,0,A.next);
-    if(i%4===0){ const b=N[BASS[Math.floor(i/8)%BASS.length]]; tone(i%8?b*2:b,STEP*2.2,'sine',.06,0,A.next); }
-    if(i%2===1) hiss(.03,.012,7000,A.next);
+    if(m) tone(N[m],STEP*1.7,'triangle',.038,0,A.next,A.gameMusic);
+    if(i%4===0){ const b=N[BASS[Math.floor(i/8)%BASS.length]]; tone(i%8?b*2:b,STEP*2.2,'sine',.06,0,A.next,A.gameMusic); }
+    if(i%2===1) hiss(.03,.012,7000,A.next,A.gameMusic);
     A.next+=STEP; A.step++;
   }
 },90);
@@ -841,12 +882,10 @@ function drawOrder(s,p,cs){
   ctx.restore();
 }
 
-function animateIdle(phase){
-  if(reduceMotion.matches) return;
-  const beat=G.time*2.4+phase;
-  const breath=(1+Math.sin(beat))*0.5;
-  ctx.rotate(Math.sin(beat*0.5)*0.016);
-  ctx.scale(1-breath*0.008,1+breath*0.022);
+function idleFrame(frames,offset){
+  const time=G.time+offset, cycle=Math.floor(time/4.2), within=time%4.2;
+  const blinking=!reduceMotion.matches&&(within<0.13||(cycle%3===2&&within>=0.25&&within<0.36));
+  return (blinking&&frames?.blink)||frames?.idle;
 }
 
 function drawSeat(i){
@@ -858,13 +897,12 @@ function drawSeat(i){
   const happy=(s.leaving&&!s.angry)||s.bump>0;
   const angry=s.angry||(s.patMax&&s.pat/s.patMax<0.25);
   const guest=SPR.guests[s.look.guest];
-  const side=cs*1.23, foot=side-cs*0.58;
-  ctx.save(); ctx.translate(p.x,y+foot);
-  if(s.in>=1&&!s.leaving&&!happy) animateIdle(1.7+i*1.9);
-  if(!drawArt(guest?.[happy?'happy':angry?'angry':'idle']||guest?.idle,-side/2,-side,side,side)){
-    drawPerson(0,-foot,cs,s.look,{happy,angry});
+  const waiting=s.in>=1&&!s.leaving&&!happy;
+  const portrait=happy?guest?.happy:angry?guest?.angry:waiting?idleFrame(guest,1.4+i*0.78):guest?.idle;
+  const side=cs*1.23;
+  if(!drawArt(portrait||guest?.idle,p.x-side/2,y-cs*0.58,side,side)){
+    drawPerson(p.x,y,cs,s.look,{happy,angry});
   }
-  ctx.restore();
   if(!s.leaving&&s.orderAt!==undefined) drawOrder(s,p,cs);
   ctx.restore();
 }
@@ -904,10 +942,10 @@ function drawBelt(){
   const chefBottom=I.y+I.h+tw*0.15;
   ctx.save();
   ctx.translate(L.chef.x,chefBottom);
-  if(pose==='idle') animateIdle(0.4);
   ctx.rotate(stroke*0.075+reach*0.10);
   ctx.scale(1+stroke*0.04,1-stroke*0.05);
-  if(!drawArt(SPR.chef[pose]||SPR.chef.idle,-chefSize/2,-chefSize,chefSize,chefSize)){
+  const portrait=pose==='idle'?idleFrame(SPR.chef,0.9):SPR.chef[pose];
+  if(!drawArt(portrait||SPR.chef.idle,-chefSize/2,-chefSize,chefSize,chefSize)){
     drawPerson(0,L.chef.y-L.chef.s*0.12-chefBottom,L.chef.s,CHEF,{chef:true,happy:cooking});
   }
   ctx.restore();
@@ -1097,6 +1135,7 @@ function placeArt(){                      // 이미지를 화면에 맞추되 �
 function showSplash(){
   document.getElementById('hud').hidden=true;
   G=null; hideOverlay(); splash.classList.remove('go'); splash.style.display=''; uiScreen='splash'; splashBusy=false;
+  if(!progress.bgmOff) ac();
 }
 function startFromSplash(){               // 시작 연출: 버튼 반짝 → 화면 줌인 → 미닫이문 닫힘 → 열리며 모드 선택
   if(splashBusy) return; splashBusy=true; const ctx=ac(); sfx.start(); playWelcome(ctx);
@@ -1119,6 +1158,7 @@ function showSettings(){
 }
 document.getElementById('startHot').addEventListener('click',startFromSplash);
 document.getElementById('gearHot').addEventListener('click',()=>{ if(!splashBusy){ ac(); sfx.ui(); showSettings(); } });
+window.addEventListener('pointerup',()=>{ if(!progress.bgmOff&&!G) ac(); },{once:true});
 function showPause(){
   showCard(`<div class="pause-banner"><div><h2>잠시 멈춤</h2><p>${G.endless?`무한 모드 · ${G.score.toLocaleString()}점 · ${fmtTime(G.time)}`:`STAGE ${G.stage} · ${G.delivered}/${G.total}`}</p></div><img src="assets/restaurant/gyuri_serve.webp" alt=""></div>
     <button class="btn" data-act="resume">계속하기</button><button class="btn sub" data-act="retry">다시 시작</button>${soundRow()}

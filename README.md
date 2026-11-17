@@ -25,6 +25,8 @@
 
 게임 시작 시 `assets/entrance.webp`의 좌우 반쪽이 미닫이문처럼 닫히며 `assets/welcome.mp3`의 환영 음성이 재생됩니다.
 
+타이틀과 모드 선택에서는 `assets/BGM.mp3`에서 만든 `assets/menu-loop.mp3`가 재생됩니다. 첫 재생에는 도입부가 포함되고, 반복할 때는 크로스페이드한 끝에서 5.82초 지점으로 이어집니다. 게임에 들어가면 기존 인게임 BGM으로 전환됩니다.
+
 ## 구조
 파일 하나(`index.html`)로 되어 있고 빌드가 필요 없습니다.
 
@@ -33,6 +35,7 @@
 | `ASSET_URLS`, `TYPES` | 재료·초밥 그림 (기본은 코드 내 SVG) |
 | `stageConfig(n)` | 스테이지별 난이도 값 |
 | `sfx`, `MEL`, `BASS` | Web Audio로 합성하는 효과음과 배경음 |
+| `assets/restaurant/*_blink.webp` | 주방장과 네 손님의 아이들 깜빡임 프레임 |
 | `burst`, `ring`, `floatText` | 이펙트(파티클) |
 
 ## 이미지 교체
