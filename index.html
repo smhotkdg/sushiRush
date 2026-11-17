@@ -183,15 +183,24 @@
   .lb-logo::before{content:'';position:absolute;inset:8% -6% 0;border-radius:50%;
     background:radial-gradient(closest-side,#ffe7b0d0,#ffc87a55 60%,#ffb34700)}
   .lb-logo .cat{position:relative;display:block;width:100%;aspect-ratio:320/240;
-    background:url('assets/restaurant/logo_cat.webp') 0 0/600% 100% no-repeat;filter:drop-shadow(0 4px 5px #0006);
-    transform-origin:40% 95%;animation:catEat 1.5s infinite,catBob 1.5s ease-in-out infinite}
-  /* 6프레임: 발견 → 깜짝 → 두 손 번쩍 → 덥석 → 냠 → 행복. 프레임이 바뀔 때 살짝 뛰고 눌려서 부드럽게 이어진다 */
-  @keyframes catEat{0%{background-position:0 0;animation-timing-function:step-end}22%{background-position:20% 0;animation-timing-function:step-end}
-    33%{background-position:40% 0;animation-timing-function:step-end}44%{background-position:60% 0;animation-timing-function:step-end}
-    56%{background-position:80% 0;animation-timing-function:step-end}72%{background-position:100% 0;animation-timing-function:step-end}100%{background-position:100% 0}}
-  @keyframes catBob{0%,18%{transform:none}24%{transform:translateY(-1.5%) scale(1.01,.99)}
-    33%{transform:translateY(-4%) scale(.98,1.03)}42%{transform:translateY(-2%)}50%{transform:translateY(0) scale(1.03,.97)}
-    58%{transform:scale(1.02,.98)}64%{transform:scale(.99,1.01)}74%{transform:translateY(-2%) scale(1.01,.99)}86%,100%{transform:none}}
+    background:url('assets/restaurant/lobby_cat_eat.webp') 0 0/400% 300% no-repeat;
+    filter:drop-shadow(0 4px 5px #0006);animation:catEat 2.8s step-end infinite}
+  /* 접시를 보고, 앞발로 집고, 두 입에 나눠 먹고, 삼킨다. */
+  @keyframes catEat{
+    0%{background-position:0 0}
+    14%{background-position:calc(100% / 3) 0}
+    20%{background-position:calc(200% / 3) 0}
+    26%{background-position:100% 0}
+    33%{background-position:0 50%}
+    40%{background-position:calc(100% / 3) 50%}
+    46%{background-position:calc(200% / 3) 50%}
+    53%{background-position:100% 50%}
+    59%{background-position:0 100%}
+    66%,75%{background-position:calc(100% / 3) 100%}
+    71%{background-position:calc(200% / 3) 100%}
+    80%{background-position:calc(200% / 3) 100%}
+    88%,100%{background-position:100% 100%}
+  }
   @keyframes logoIn{from{transform:scale(.85) translateY(-10px);opacity:0}}
   .lb-tabs{flex:none;display:flex;gap:4px;margin:8px auto 10px;width:min(100%,380px);padding:4px;border-radius:999px;
     background:#3a2620e8;border:2px solid #e9bf73;box-shadow:0 3px 0 #1c110e,inset 0 2px 6px #0006}
@@ -293,7 +302,13 @@ const ASSET_ROOT = 'assets/restaurant/';
 const ASSET_URLS = {};
 const CHEF_STATES = ['idle','blink','cook','serve','skill'];
 const GUEST_STATES = ['idle','blink','angry','happy'];
-const GUESTS = ['calico','rabbit','shiba','tuxedo'];
+const LEGACY_GUESTS = ['calico','rabbit','shiba','tuxedo'];
+const CAT_GUESTS = [
+  'ginger_tabby','silver_tabby','bombay','turkish_angora',
+  'russian_blue','siamese','ragdoll','persian',
+  'bengal','maine_coon','tortoiseshell','scottish_fold',
+];
+const GUESTS = LEGACY_GUESTS.concat(CAT_GUESTS);
 const SPECIAL_GUESTS = ['vip','rush'];          // 특별 손님 그림 (기존 손님 + 소품)
 const UI_PARTS = ['belt','kitchen','board','bubble','badge','progress'];
 const SLAB = 'M8 40C8 28 17 20 30 18L48 15C58 14 61 23 57 32C53 43 43 49 30 50L16 51C10 51 8 46 8 40Z';
@@ -337,17 +352,18 @@ async function loadAssets(){
   await Promise.all([
     ...CHEF_STATES.map(async state=>{ SPR.chef[state]=await loadImg(ASSET_ROOT+'gyuri_'+state+'.webp'); }),
     ...['walk','eat'].map(async st=>{ SPR.stray[st]=await loadImg(ASSET_ROOT+'stray_'+st+'.webp'); }),
-    ...GUESTS.concat(SPECIAL_GUESTS).map(async guest=>{
+    ...LEGACY_GUESTS.concat(SPECIAL_GUESTS).map(async guest=>{
       const images=await Promise.all(GUEST_STATES.map(state=>loadImg(ASSET_ROOT+guest+'_'+state+'.webp')));
       SPR.guests[guest]=Object.fromEntries(GUEST_STATES.map((state,i)=>[state,images[i]]));
+    }),
+    ...CAT_GUESTS.map(async guest=>{
+      SPR.guests[guest]={idle:await loadImg(ASSET_ROOT+'guest_'+guest+'.webp')};
     }),
     ...UI_PARTS.map(async part=>{ SPR.ui[part]=await loadImg(ASSET_ROOT+'ui_'+part+'.webp'); }),
     ...TYPE_ORDER.map(async k=>{
     let im = ASSET_URLS['ing_'+k] ? await loadImg(ASSET_URLS['ing_'+k]) : null;
     if(!im) im = await loadImg('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(TYPES[k].svg));
-    const c=document.createElement('canvas'); c.width=c.height=128;
-    if(im) c.getContext('2d').drawImage(im,0,0,128,128);
-    SPR.ing[k]=c;
+    SPR.ing[k]=im || document.createElement('canvas');
     const su = ASSET_URLS['sushi_'+k] ? await loadImg(ASSET_URLS['sushi_'+k]) : null;
     SPR.sushi[k] = su || composeSushi(k);
     }),
@@ -378,7 +394,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.4.3';
+const VERSION = 'v1.5.0';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1710,9 +1726,10 @@ function drawBar(){
   const x=W*0.08,w=G.skillOn?L.skill.x-L.skill.r-8-x:W*0.84,y=L.barY,h=L.barH;
   const art=SPR.ui.progress, scale=h/103, capWidth=56, capDraw=capWidth*scale;
   if(art){
-    ctx.drawImage(art,capWidth,0,394-2*capWidth,103,x+capDraw-0.5,y,w-2*capDraw+1,h);
-    ctx.drawImage(art,0,0,capWidth,103,x,y,capDraw,h);
-    ctx.drawImage(art,394-capWidth,0,capWidth,103,x+w-capDraw,y,capDraw,h);
+    const sw=art.naturalWidth, sh=art.naturalHeight, capSrc=capWidth*sw/394;
+    ctx.drawImage(art,capSrc,0,sw-2*capSrc,sh,x+capDraw-0.5,y,w-2*capDraw+1,h);
+    ctx.drawImage(art,0,0,capSrc,sh,x,y,capDraw,h);
+    ctx.drawImage(art,sw-capSrc,0,capSrc,sh,x+w-capDraw,y,capDraw,h);
   }else{
     ctx.fillStyle='#a85e29'; rr(ctx,x,y,w,h,h/2); ctx.fill();
   }
