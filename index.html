@@ -940,13 +940,14 @@ function drawBelt(){
   const stroke=cooking&&!reduceMotion.matches?Math.sin(Math.PI*G.cookTime/COOK_TIME):0;
   const reach=serving&&!reduceMotion.matches?G.chefServe/SERVE_TIME:0;
   const chefSize=Math.min(I.h*1.24,I.w*0.62);
-  const pose=cooking?'cook':serving?'serve':'idle';
+  // 조리가 끝나면 완료 자세를 유지하고, 레일에 올린 뒤에만 기본 자세로 돌아간다.
+  const pose=cooking?'cook':G.ready!==null||serving?'serve':'idle';
   const chefBottom=I.y+I.h+tw*0.15;
   ctx.save();
   ctx.translate(L.chef.x,chefBottom);
   ctx.rotate(stroke*0.075+reach*0.10);
   ctx.scale(1+stroke*0.04,1-stroke*0.05);
-  const portrait=pose==='idle'&&G.ready===null?idleFrame(SPR.chef,0.9):SPR.chef[pose];
+  const portrait=pose==='idle'?idleFrame(SPR.chef,0.9):SPR.chef[pose];
   if(!drawArt(portrait||SPR.chef.idle,-chefSize/2,-chefSize,chefSize,chefSize)){
     drawPerson(0,L.chef.y-L.chef.s*0.12-chefBottom,L.chef.s,CHEF,{chef:true,happy:cooking});
   }
