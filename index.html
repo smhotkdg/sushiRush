@@ -141,7 +141,8 @@
   .login .naver{background:#03C75A;color:#fff}
   .login .google{background:#fff;color:#1f1f1f;border:1px solid #747775}
   .login svg{width:20px;height:20px;flex:none}
-  .login button[disabled]{opacity:.45;cursor:default}
+  .login button[disabled]{opacity:.45;cursor:default;filter:grayscale(.6)}
+  .login .soon{position:absolute;right:10px;padding:2px 8px;border-radius:999px;background:#0000002e;font-size:12px}
   .note{font-size:12px;color:#8b6a52;margin:8px 0 0;line-height:1.45;word-break:keep-all}
   .err{color:#b3261e;font-size:13px;margin:6px 0 0;min-height:1.2em;word-break:keep-all}
   .field{display:block;width:100%;margin:6px 0 2px;padding:11px 12px;border-radius:11px;border:1.5px solid #d3a16a;background:#fffdf7;
@@ -352,7 +353,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.1';
+const VERSION = 'v1.1.1';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1298,6 +1299,7 @@ const AUTH_CONFIG={
   naverClientId:'IyIFbZoIfWq2X9kIWKGt',     // 네이버 Client ID (공개 ID)
   googleClientId:'512082006194-0uoehtsbo2465bnlvrpemo65lnkfvldl.apps.googleusercontent.com',   // 구글 OAuth Client ID (공개 ID)
   kakaoTokenUrl:'',              // 나중에 서버(Firebase Functions 등)를 붙이면 카카오 인가 코드를 여기로 보낸다
+  enabled:{google:true, kakao:false, naver:false},   // 지금은 Google 만 사용. true 로 바꾸면 다시 켜진다
 };
 const PROVIDERS={ kakao:{label:'카카오'}, naver:{label:'네이버'}, google:{label:'Google'} };
 // 콘솔에 등록한 주소와 글자 하나까지 같아야 하므로, 배포 주소에서는 고정값을 쓴다.
@@ -1328,6 +1330,7 @@ function naverLogin(){                   // 네이버 공식 SDK (implicit 방�
 }
 
 async function startLogin(provider){
+  if(!AUTH_CONFIG.enabled[provider]) return;
   authMsg='';
   const state=randomId(), nonce=randomId();
   pendingSet({provider,state,nonce,back:authBack});
@@ -1432,7 +1435,8 @@ function accountRow(compact){
 const authView=()=>authBack==='title'?'menu':'dialog';
 function showLogin(){
   uiScreen='login';
-  const b=(p,t)=>`<button class="${p}" data-act="login-${p}">${ICONS[p]}<span>${t}</span></button>`;
+  const b=(p,t)=>AUTH_CONFIG.enabled[p]?`<button class="${p}" data-act="login-${p}">${ICONS[p]}<span>${t}</span></button>`
+    :`<button class="${p}" disabled aria-disabled="true">${ICONS[p]}<span>${t}</span><span class="soon">준비 중</span></button>`;
   showCard(`<h2>로그인</h2><p>로그인하면 기록이 계정에 연결되고, 무한 모드 랭킹에 참여할 수 있어요.</p>
     <div class="login">${b('kakao','카카오 로그인')}${b('naver','네이버 로그인')}${b('google','Google 계정으로 로그인')}</div>
     <div class="err">${esc(authMsg)}</div>
