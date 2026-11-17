@@ -18,7 +18,7 @@
     width:min(100vw,calc(100dvh * .62));
     padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
     background:var(--bg);box-shadow:0 0 40px rgba(107,63,42,.25)}
-  #stage{position:relative;width:100%;height:100%;overflow:hidden}
+  #stage{position:relative;width:100%;height:100%;overflow:hidden;container-type:size}
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   #hud{position:absolute;left:0;right:0;top:0;height:52px;display:flex;align-items:center;
     justify-content:space-between;padding:0 12px;pointer-events:none;color:var(--ink)}
@@ -161,71 +161,82 @@
   .rank.g span:nth-of-type(1){text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .myrank{margin:0 0 6px;font-size:13px;color:#744a37}.myrank b{font-weight:400;color:#9b3d2a}
   .gmsg{font-size:13px;color:#9b3d2a;margin:6px 0}
-  /* ---- 로비(모드 선택) ---- */
+  /* ---- 로비(모드 선택) — 크기는 게임 영역(cqw/cqh) 기준 ---- */
   #lobby{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;overflow:hidden;color:#fff4dc;
-    background:linear-gradient(#1d1426cc,#1d142600 22%,#1d142600 62%,#1d1426e6),url('assets/menu-background.webp') center/cover,#4e3330;
-    padding:max(8px,env(safe-area-inset-top)) clamp(10px,3.5vw,16px) max(12px,env(safe-area-inset-bottom))}
+    background:linear-gradient(#1d1426cc,#1d142600 20%,#1d142600 60%,#1d1426e6),url('assets/menu-background.webp') center/cover,#4e3330;
+    padding:max(8px,env(safe-area-inset-top)) clamp(10px,4cqw,18px) max(12px,env(safe-area-inset-bottom))}
   #lobby[hidden]{display:none}
-  .lb-top{display:flex;align-items:center;gap:8px;flex:none}
-  .lb-round{flex:none;width:42px;height:42px;border-radius:50%;border:2px solid #f3cf8e;background:#3a2620e6;color:#ffe8b8;
-    font:inherit;font-size:20px;display:grid;place-items:center;cursor:pointer;box-shadow:0 3px 0 #1c110e;padding:0}
+  .lb-top{display:flex;align-items:center;gap:8px;flex:none;height:clamp(34px,9cqw,40px)}
+  .lb-round{flex:none;height:100%;aspect-ratio:1;border-radius:50%;border:2px solid #e9bf73;background:#3a2620e8;color:#ffe8b8;
+    display:grid;place-items:center;cursor:pointer;box-shadow:0 2px 0 #1c110e;padding:0}
+  .lb-round svg{width:52%;height:52%}
   .lb-round:active{transform:translateY(2px);box-shadow:none}
-  .lb-acct{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:42px;padding:0 6px 0 6px;border:0;cursor:pointer;
-    background:url('assets/restaurant/ui_hint.webp') center/100% 100% no-repeat;color:#ffeccb;font:inherit;font-size:15px;text-align:left}
-  .lb-acct .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .lb-acct .go{flex:none;padding:5px 12px;border-radius:999px;background:#be4935;color:#fff5db;font-size:14px;box-shadow:0 2px 0 #7a2a1d}
-  .lb-logo{flex:none;height:clamp(64px,19dvh,178px);aspect-ratio:870/470;max-width:92%;margin:4px auto 0;
+  .lb-acct{flex:0 1 auto;min-width:0;max-width:calc(100% - 2 * clamp(34px,9cqw,40px) - 24px);height:100%;display:flex;align-items:center;gap:7px;
+    padding:0 12px 0 4px;border-radius:999px;border:2px solid #e9bf73;background:#3a2620e8;box-shadow:0 2px 0 #1c110e;
+    color:#ffeccb;font:inherit;font-size:clamp(13px,3.6cqw,15px);cursor:pointer;text-align:left}
+  .lb-acct .pv{width:26px;height:26px;border-radius:50%;flex:none}
+  .lb-acct .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lb-acct .go{flex:none;margin-left:2px;padding:3px 10px;border-radius:999px;background:#be4935;color:#fff5db;font-size:.9em}
+  .lb-top .lb-round:last-child{margin-left:auto}
+  .lb-logo{flex:none;height:clamp(64px,16cqh,150px);aspect-ratio:870/470;max-width:84%;margin:2px auto 0;
     background:url('assets/title.webp') 43% 3.2%/108% auto no-repeat;filter:drop-shadow(0 6px 10px #0009);animation:logoIn .5s cubic-bezier(.2,1.4,.4,1)}
   @keyframes logoIn{from{transform:scale(.85) translateY(-10px);opacity:0}}
-  .lb-tabs{flex:none;display:flex;gap:10px;margin:8px 0 10px}
-  .lb-tab{flex:1;height:54px;border:0;cursor:pointer;font:inherit;font-size:clamp(17px,5vw,21px);display:flex;align-items:center;justify-content:center;gap:6px;
-    background:url('assets/restaurant/ui_hint.webp') center/100% 100% no-repeat;color:#e9cfa6;opacity:.92;transition:transform .15s}
-  .lb-tab .ic{font-size:1.1em}
-  .lb-tab.on{background-image:url('assets/restaurant/ui_pause.webp');color:#8f2f20;opacity:1;transform:translateY(-3px) scale(1.04);filter:drop-shadow(0 5px 6px #0007)}
-  .lb-panel{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;border-radius:20px;padding:10px;
-    background:#fff6e2f2;border:3px solid #e4705a;box-shadow:inset 0 0 0 3px #fff3dc,0 8px 18px #0008;color:#512b24}
-  .lb-plates{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);align-content:center;gap:clamp(4px,1.6vw,10px) clamp(2px,1vw,6px)}
+  .lb-tabs{flex:none;display:flex;gap:4px;margin:8px auto 10px;width:min(100%,380px);padding:4px;border-radius:999px;
+    background:#3a2620e8;border:2px solid #e9bf73;box-shadow:0 3px 0 #1c110e,inset 0 2px 6px #0006}
+  .lb-tab{flex:1;height:clamp(36px,10cqw,42px);border:0;border-radius:999px;cursor:pointer;background:transparent;color:#e7cfa8;
+    font:inherit;font-size:clamp(15px,4.4cqw,18px);display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s,color .15s}
+  .lb-tab .ic{width:1.35em;height:1.35em;flex:none;display:grid;place-items:center}
+  .lb-tab .ic img,.lb-tab .ic svg{width:100%;height:100%;object-fit:contain}
+  .lb-tab.on{background:linear-gradient(#fff6e2,#f6e0b5);color:#9b3d2a;box-shadow:0 2px 0 #b98a52,inset 0 0 0 1.5px #e4705a}
+  .lb-panel{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;border-radius:18px;padding:clamp(8px,2.6cqw,12px);
+    background:#fff6e2f0;border:2.5px solid #e4705a;box-shadow:inset 0 0 0 3px #fff3dc,0 8px 18px #0008;color:#512b24}
+  .lb-plates{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);align-content:center;gap:clamp(4px,1.6cqw,9px) clamp(3px,1.2cqw,8px);
+    width:100%;max-width:400px;margin:0 auto}
   .plate{position:relative;aspect-ratio:1;border:0;padding:0;cursor:pointer;background:url('assets/restaurant/ui_plate.webp') center/contain no-repeat;
-    font:inherit;font-size:clamp(17px,5.2vw,22px);color:#7a3b22;display:grid;place-items:center;transition:transform .12s}
+    font:inherit;font-size:clamp(15px,4.6cqw,20px);color:#7a3b22;display:grid;place-items:center;transition:transform .12s}
   .plate:active{transform:scale(.92)}
-  .plate.done::after{content:'✓';position:absolute;right:2%;top:2%;width:38%;aspect-ratio:1;display:grid;place-items:center;font-size:.62em;color:#fff;
+  .plate.done::after{content:'✓';position:absolute;right:2%;top:2%;width:36%;aspect-ratio:1;display:grid;place-items:center;font-size:.6em;color:#fff;
     background:url('assets/restaurant/ui_badge.webp') center/contain no-repeat}
   .plate.now{animation:bob 1.4s ease-in-out infinite}
-  .plate.now::before{content:'';position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px #ffc83d,0 0 14px 4px #ffc83d99}
-  .plate.sel{transform:scale(1.12)}
-  .plate.sel::before{content:'';position:absolute;inset:4%;border-radius:50%;box-shadow:0 0 0 4px #be4935,0 0 14px 3px #be493566}
-  .plate.lock{filter:grayscale(.85) brightness(.9);opacity:.55;cursor:default;font-size:clamp(13px,3.8vw,16px)}
+  .plate.now::before{content:'';position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px #ffc83d,0 0 12px 3px #ffc83d99}
+  .plate.sel{transform:scale(1.1)}
+  .plate.sel::before{content:'';position:absolute;inset:4%;border-radius:50%;box-shadow:0 0 0 3.5px #be4935,0 0 12px 3px #be493566}
+  .plate.lock{filter:grayscale(.85) brightness(.9);opacity:.5;cursor:default}
+  .plate.lock svg{width:34%;height:34%;color:#8a7766}
   @keyframes bob{50%{transform:translateY(-4px)}}
   .lb-pager{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
-  .lb-pager button{width:44px;height:36px;border-radius:12px;border:2px solid #d3a16a;background:#fff0cf;color:#633e31;font:inherit;font-size:16px;cursor:pointer;box-shadow:0 3px 0 #c59260}
+  .lb-pager button{width:40px;height:32px;border-radius:10px;border:1.5px solid #d3a16a;background:#fff0cf;color:#633e31;font:inherit;font-size:14px;cursor:pointer;box-shadow:0 2px 0 #c59260}
   .lb-pager button:disabled{opacity:.35;box-shadow:none;cursor:default}
-  .lb-pager .info{flex:1;text-align:center;font-size:14px;color:#744a37;line-height:1.25}
-  .lb-pager .info b{font-weight:400;color:#9b3d2a}
-  .lb-hero{flex:none;display:flex;align-items:flex-end;gap:4px;margin:-4px 0 6px}
-  .lb-hero img{width:clamp(76px,24vw,104px);flex:none;filter:drop-shadow(0 4px 4px #0003)}
-  .lb-bubble{flex:1;position:relative;min-height:64px;display:flex;flex-direction:column;justify-content:center;padding:8px 12px;border-radius:16px;
-    background:#fff;border:2.5px solid #e4705a;font-size:14px;line-height:1.35;color:#5b3326}
-  .lb-bubble::before{content:'';position:absolute;left:-12px;bottom:16px;border:7px solid transparent;border-right:9px solid #e4705a}
-  .lb-bubble .myrank{margin:0;font-size:14px;color:#5b3326}
-  .lb-bubble .mini{margin-top:6px;align-self:flex-start;border:0;border-radius:999px;background:#be4935;color:#fff5db;font:inherit;font-size:13px;padding:5px 12px;cursor:pointer;box-shadow:0 2px 0 #7a2a1d}
-  .lb-panel h3{margin:2px 0 6px;font-size:16px;font-weight:400;text-align:center;color:#8f2f20}
+  .lb-pager .info{flex:1;text-align:center;font-size:13px;color:#744a37;line-height:1.3}
+  .lb-pager .info b{font-weight:400;font-size:15px;color:#9b3d2a}
+  .lb-hero{flex:none;display:flex;align-items:center;gap:6px;margin:-2px 0 8px}
+  .lb-hero img{width:clamp(60px,17cqw,84px);flex:none;filter:drop-shadow(0 4px 4px #0003)}
+  .lb-bubble{flex:1;min-width:0;position:relative;padding:9px 12px;border-radius:14px;background:#fff;border:2px solid #e4705a;font-size:clamp(12px,3.5cqw,14px);line-height:1.4;color:#5b3326}
+  .lb-bubble::before{content:'';position:absolute;left:-11px;top:50%;margin-top:-7px;border:7px solid transparent;border-right:9px solid #e4705a}
+  .lb-bubble .myrank{margin:0;font-size:inherit;color:#5b3326}
+  .lb-bubble .mini{display:inline-block;margin-left:6px;border:0;border-radius:999px;background:#be4935;color:#fff5db;font:inherit;font-size:12px;padding:3px 10px;cursor:pointer}
+  .lb-panel h3{margin:0 0 6px;font-size:14px;font-weight:400;text-align:center;color:#8f2f20;letter-spacing:.04em}
   .lb-list{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;border-radius:12px}
-  #lobby .rank{margin:0;border-radius:12px;background:#fffdf7;border:1px solid #f0d6bd}
-  #lobby .rank.g>div{grid-template-columns:30px 1.6fr 1.2fr .9fr;padding:7px 2px;font-size:15px}
-  #lobby .rank.g>div:nth-child(1) b,#lobby .rank.g>div:nth-child(2) b,#lobby .rank.g>div:nth-child(3) b{color:transparent;position:relative}
-  #lobby .rank.g>div:nth-child(-n+3) b::after{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:18px;color:initial}
-  #lobby .rank.g>div:nth-child(1) b::after{content:'🥇'}#lobby .rank.g>div:nth-child(2) b::after{content:'🥈'}#lobby .rank.g>div:nth-child(3) b::after{content:'🥉'}
-  .lb-cta{flex:none;position:relative;overflow:hidden;margin:12px auto 0;width:min(100%,360px);height:clamp(58px,8.5vh,70px);border-radius:999px;cursor:pointer;
-    border:3px solid #ffd27a;background:linear-gradient(#d65a40,#a8371f);color:#fff7df;font:inherit;font-size:clamp(22px,6.6vw,28px);letter-spacing:.02em;
-    display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 6px 0 #6e2416,0 12px 22px #0009;text-shadow:0 2px 0 #7a2a1d;
-    animation:ctaPulse 1.6s ease-in-out infinite}
-  .lb-cta img{height:62%;filter:drop-shadow(0 2px 2px #0005)}
-  .lb-cta small{font-size:.6em;opacity:.9}
-  .lb-cta::after{content:'';position:absolute;inset:0;background:linear-gradient(110deg,transparent 35%,#fff7 50%,transparent 65%);transform:translateX(-120%);animation:shine 2.8s ease-in-out infinite}
-  .lb-cta:active{transform:translateY(4px);box-shadow:0 2px 0 #6e2416}
-  @keyframes ctaPulse{50%{box-shadow:0 6px 0 #6e2416,0 12px 22px #0009,0 0 0 6px #ffd27a44}}
-  @media (max-height:680px){ .lb-tab{height:46px} .lb-hero img{width:66px} .lb-cta{margin-top:9px} }
-  @media (prefers-reduced-motion:reduce){ .lb-cta,.lb-cta::after,.plate.now,.lb-logo{animation:none} }
+  #lobby .rank{margin:0;border-radius:12px;background:#fffdf7;border:1px solid #f0d6bd;padding:2px 10px}
+  #lobby .rank.empty{padding:16px;font-size:14px}
+  #lobby .rank .ph{opacity:.42}
+  #lobby .rank.g>div{grid-template-columns:28px 1.6fr 1.1fr .8fr;padding:6px 0;font-size:clamp(13px,3.6cqw,15px)}
+  #lobby .rank.g>div:nth-child(-n+3) b{color:transparent;position:relative}
+  #lobby .rank.g>div:nth-child(-n+3) b::after{content:attr(data-r);position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;
+    display:grid;place-items:center;font-size:12px;color:#fff;background:#d4a017;box-shadow:inset 0 -2px 0 #0002}
+  #lobby .rank.g>div:nth-child(2) b::after{background:#a3aab4}
+  #lobby .rank.g>div:nth-child(3) b::after{background:#c27a43}
+  .lb-cta{flex:none;position:relative;margin:12px auto 0;width:min(88%,330px);height:clamp(52px,15cqw,62px);border-radius:999px;cursor:pointer;
+    padding:4px;border:0;background:#fff3d6;box-shadow:0 0 0 2.5px #9a3a24,0 5px 0 2.5px #5e2215,0 12px 20px #000a;font:inherit}
+  .lb-cta .in{position:relative;overflow:hidden;width:100%;height:100%;border-radius:999px;display:flex;align-items:center;gap:10px;padding:0 18px 0 6px;
+    background:linear-gradient(#e0614a 0%,#c2432e 55%,#a5341f 100%);box-shadow:inset 0 2px 0 #ffb19f88,inset 0 -3px 0 #7a2a1d88}
+  .lb-cta .ico{flex:none;height:calc(100% - 8px);aspect-ratio:1;border-radius:50%;background:#fff6e2;display:grid;place-items:center;box-shadow:inset 0 -2px 0 #e2c79b}
+  .lb-cta .ico img{width:78%}
+  .lb-cta .lbl{flex:1;text-align:center;color:#fff8e6;font-size:clamp(19px,5.6cqw,24px);letter-spacing:.03em;text-shadow:0 2px 0 #7a2a1d,0 0 1px #7a2a1d}
+  .lb-cta .arr{flex:none;width:0;height:0;border-left:11px solid #ffe2a8;border-top:8px solid transparent;border-bottom:8px solid transparent;filter:drop-shadow(0 1px 0 #7a2a1d)}
+  .lb-cta .in::after{content:'';position:absolute;inset:0;background:linear-gradient(110deg,transparent 38%,#ffffff55 50%,transparent 62%);transform:translateX(-120%);animation:shine 3.2s ease-in-out infinite}
+  .lb-cta:active{transform:translateY(3px);box-shadow:0 0 0 2.5px #9a3a24,0 2px 0 2.5px #5e2215,0 6px 12px #000a}
+  @media (prefers-reduced-motion:reduce){ .lb-cta .in::after,.plate.now,.lb-logo{animation:none} }
   .stars{font-size:34px;letter-spacing:4px;margin:2px 0 8px;color:var(--gold);text-shadow:0 2px 0 #e0a100}
 </style>
 </head>
@@ -353,7 +364,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.1.1';
+const VERSION = 'v1.2.1';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -665,8 +676,10 @@ function layout(){
   const playH=L.playBot-L.playTop;
   L.cs=Math.min(W*0.21,playH*0.2);                       // 손님 크기
   L.bx0=W*0.06; L.bx1=W*0.94;
-  L.by0=L.playTop+L.cs*0.92; L.by1=L.playBot-L.cs*0.92;
-  const bw=L.bx1-L.bx0,bh=L.by1-L.by0;
+  // 벨트 그림(ui_belt 399×255)이 찌그러지지 않게 세로는 그림 비율의 110% 까지만 쓰고, 남는 공간에서는 가운데 정렬한다.
+  const availTop=L.playTop+L.cs*0.92, availH=(L.playBot-L.cs*0.92)-availTop;
+  const bw=L.bx1-L.bx0, bh=Math.min(availH,bw*BELT_ART.h/BELT_ART.w*1.1);
+  L.by0=availTop+(availH-bh)/2; L.by1=L.by0+bh;
   L.path=beltPath(L.bx0,L.by0,bw,bh);
   L.tw=Math.min(bw*39/BELT_ART.w,bh*42/BELT_ART.h);
   const {topStart,bottomStart}=L.path;
@@ -1195,6 +1208,12 @@ function showCard(html,view='dialog'){
 const soundRow=()=>`<div class="row"><button class="btn sub" data-act="sfx">효과음 ${progress.sfxOff?'꺼짐':'켜짐'}</button><button class="btn sub" data-act="bgm">배경음 ${progress.bgmOff?'꺼짐':'켜짐'}</button></div>`;
 let titlePage=-1, resetArmed=false;
 let lobbySel=0;                                   // 스테이지 탭에서 고른 스테이지
+const LB_ICON={
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>',
+  inf:'<svg viewBox="0 0 32 18" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M16 9c-3-4.6-5.6-6.4-8.3-6.4A6.4 6.4 0 0 0 7.7 15.4C10.4 15.4 13 13.6 16 9s5.6-6.4 8.3-6.4a6.4 6.4 0 0 1 0 12.8C21.6 15.4 19 13.6 16 9z"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 10V8a5 5 0 0 1 10 0v2h1.2c.7 0 1.3.6 1.3 1.3v8.4c0 .7-.6 1.3-1.3 1.3H5.8c-.7 0-1.3-.6-1.3-1.3v-8.4c0-.7.6-1.3 1.3-1.3H7zm2.4 0h5.2V8a2.6 2.6 0 0 0-5.2 0v2z"/></svg>',
+};
 const lobbyEl=document.getElementById('lobby');
 const lobbyShown=()=>!lobbyEl.hidden;
 function hideLobby(){ lobbyEl.hidden=true; }
@@ -1205,7 +1224,7 @@ function showTitle(){                            // 모드 선택 로비
   const unlocked=Math.min(progress.unlocked,MAX_STAGE);
   if(!lobbySel||lobbySel>unlocked) lobbySel=unlocked;
   const acct=u?`${pvBadge(u.provider)}<span class="nm">${esc(u.nickname||'닉네임 미설정')}</span>`
-              :`<span class="nm">로그인하고 랭킹 도전!</span><span class="go">로그인</span>`;
+              :`<span class="nm">랭킹 도전!</span><span class="go">로그인</span>`;
   let panel, cta;
   if(tab==='stage'){
     const pages=Math.ceil(MAX_STAGE/PAGE);
@@ -1214,28 +1233,28 @@ function showTitle(){                            // 모드 선택 로비
     const from=titlePage*PAGE+1, to=Math.min(MAX_STAGE,from+PAGE-1);
     let g=''; for(let i=from;i<=to;i++){
       const done=i<=(progress.cleared||0)||i<progress.unlocked, lock=i>unlocked, now=i===unlocked&&!done;
-      g+=`<button class="plate${done?' done':''}${now?' now':''}${lock?' lock':''}${i===lobbySel?' sel':''}" data-pick="${i}" ${lock?'disabled aria-label="잠김"':''}>${lock?'🔒':i}</button>`;
+      g+=`<button class="plate${done?' done':''}${now?' now':''}${lock?' lock':''}${i===lobbySel?' sel':''}" data-pick="${i}" ${lock?`disabled aria-label="${i} 잠김"`:''}>${lock?LB_ICON.lock:i}</button>`;
     }
     const best=progress.best&&progress.best[lobbySel];
     panel=`<div class="lb-plates">${g}</div>
       <div class="lb-pager"><button data-act="prev" ${titlePage<=0?'disabled':''} aria-label="이전">◀</button>
         <div class="info"><b>STAGE ${lobbySel}</b>${best?` · 최고 ${best}초`:lobbySel===unlocked&&!(lobbySel<=(progress.cleared||0))?' · 도전 중':''}<br><small>${from}–${to} / ${MAX_STAGE}</small></div>
         <button data-act="nextpage" ${titlePage>=pages-1?'disabled':''} aria-label="다음">▶</button></div>`;
-    cta=`<button class="lb-cta" data-act="play-stage"><img src="assets/restaurant/sushi_salmon.webp" alt="">STAGE ${lobbySel} 시작</button>`;
+    cta=`<button class="lb-cta" data-act="play-stage"><span class="in"><span class="ico"><img src="assets/restaurant/sushi_salmon.webp" alt=""></span><span class="lbl">STAGE ${lobbySel} 시작</span><span class="arr"></span></span></button>`;
   }else{
     panel=`<div class="lb-hero"><img src="assets/restaurant/gyuri_serve.webp" alt="">
         <div class="lb-bubble"><div id="gMine" class="myrank">기록을 불러오는 중…</div></div></div>
       <h3>전체 순위 TOP 10</h3>
       <div class="lb-list"><div id="gRank" class="rank empty">불러오는 중…</div></div>`;
-    cta=`<button class="lb-cta" data-act="endless"><img src="assets/restaurant/sushi_tuna.webp" alt="">무한 모드 시작</button>`;
+    cta=`<button class="lb-cta" data-act="endless"><span class="in"><span class="ico"><img src="assets/restaurant/sushi_tuna.webp" alt=""></span><span class="lbl">무한 모드 시작</span><span class="arr"></span></span></button>`;
   }
   lobbyEl.innerHTML=`<div class="lb-top">
-      <button class="lb-round" data-act="splash" aria-label="타이틀 화면">⌂</button>
+      <button class="lb-round" data-act="splash" aria-label="타이틀 화면">${LB_ICON.home}</button>
       <button class="lb-acct" data-act="${u?'lobby-settings':'login'}">${acct}</button>
-      <button class="lb-round" data-act="lobby-settings" aria-label="설정">⚙</button></div>
+      <button class="lb-round" data-act="lobby-settings" aria-label="설정">${LB_ICON.gear}</button></div>
     <div class="lb-logo" role="img" aria-label="규리네 초밥은 못 참지"></div>
-    <div class="lb-tabs"><button class="lb-tab ${tab==='stage'?'on':''}" data-act="tab-stage"><span class="ic">🍣</span>스테이지</button>
-      <button class="lb-tab ${tab==='endless'?'on':''}" data-act="tab-endless"><span class="ic">♾️</span>무한 모드</button></div>
+    <div class="lb-tabs" role="tablist"><button class="lb-tab ${tab==='stage'?'on':''}" role="tab" aria-selected="${tab==='stage'}" data-act="tab-stage"><span class="ic"><img src="assets/restaurant/sushi_salmon.webp" alt=""></span>스테이지</button>
+      <button class="lb-tab ${tab==='endless'?'on':''}" role="tab" aria-selected="${tab==='endless'}" data-act="tab-endless"><span class="ic">${LB_ICON.inf}</span>무한 모드</button></div>
     <div class="lb-panel">${panel}</div>${cta}`;
   lobbyEl.hidden=false;
   if(tab==='endless') loadGlobalRank();
@@ -1558,7 +1577,8 @@ async function loadGlobalRank(){
   try{
     const api=await fb(), [list,mine]=await Promise.all([api.top(10), me?api.mine(me):null]);
     setHtml('gRank',!list.length?'<div id="gRank" class="rank empty">아직 등록된 기록이 없어요</div>':
-      '<div id="gRank" class="rank g">'+list.map((e,i)=>`<div class="${e.pid===me?'me':''}"><b>${i+1}</b><span>${esc(e.name)}</span><span>${e.score.toLocaleString()}점</span><span>손님 ${e.served}</span></div>`).join('')+'</div>');
+      '<div id="gRank" class="rank g">'+list.map((e,i)=>`<div class="${e.pid===me?'me':''}"><b data-r="${i+1}">${i+1}</b><span>${esc(e.name)}</span><span>${e.score.toLocaleString()}점</span><span>손님 ${e.served}</span></div>`).join('')
+      +(lobbyShown()?Array.from({length:Math.max(0,10-list.length)},(_,k)=>`<div class="ph"><b data-r="${list.length+k+1}">${list.length+k+1}</b><span>도전자를 기다리는 중</span><span>—</span><span></span></div>`).join(''):'')+'</div>');
     setHtml('gMine',`<div id="gMine" class="myrank">${!u?'로그인하면 내 기록이 순위에 올라가요.<button class="mini" data-act="login">로그인</button>':mine?`내 최고 <b>${mine.score.toLocaleString()}점</b> · 전체 <b>${mine.rank}위</b> · 생존 ${fmtTime(mine.time)}`:`${esc(u.nickname||'')} 님은 아직 등록된 기록이 없어요.`}</div>`);
   }catch(e){ console.warn('[rank]',e); setHtml('gRank','<div id="gRank" class="rank empty">전체 순위를 불러오지 못했어요</div>'); setHtml('gMine','<div id="gMine"></div>'); }
 }
