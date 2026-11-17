@@ -282,7 +282,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v0.9';
+const VERSION = 'v0.9.1';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1202,9 +1202,9 @@ window.addEventListener('pointerup',()=>{ if(!progress.bgmOff&&!G) ac(); },{once
    - 각 개발자 콘솔에 등록할 주소는 REDIRECT_URI 이며, 개발자용 화면에서도 확인할 수 있다.
    ===================================================================== */
 const AUTH_CONFIG={
-  kakaoRestKey:'bb835edeef01a6eea73ad1e37002985a',      // 카카오 REST API 키 (공개 ID)
-  naverClientId:'M3AoI2qMNoIFYP1H3cx3',     // 네이버 Client ID (공개 ID)
-  googleClientId:'730235734503-9mtl06rvvi10ovcuejv1pbr2kfprcteu.apps.googleusercontent.com',   // 구글 OAuth Client ID (공개 ID)
+  kakaoRestKey:'65a8da75c6d173b81e7a7c35880ace06',      // 카카오 REST API 키 (공개 ID)
+  naverClientId:'IyIFbZoIfWq2X9kIWKGt',     // 네이버 Client ID (공개 ID)
+  googleClientId:'512082006194-0uoehtsbo2465bnlvrpemo65lnkfvldl.apps.googleusercontent.com',   // 구글 OAuth Client ID (공개 ID)
   kakaoTokenUrl:'',              // 나중에 서버(Firebase Functions 등)를 붙이면 카카오 인가 코드를 여기로 보낸다
 };
 const PROVIDERS={ kakao:{label:'카카오'}, naver:{label:'네이버'}, google:{label:'Google'} };
