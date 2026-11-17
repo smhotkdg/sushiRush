@@ -156,6 +156,10 @@
   .dev .tool .btn{width:auto;margin:0;padding:7px 12px;font-size:14px;flex:none}
   .dev .tool .btn.armed{background:#b3261e;border-color:#8c1d18;box-shadow:0 3px 0 #6e1712}
   .devbadge{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#503f58;color:#fff2d6;font-size:12px;vertical-align:3px}
+  .rank.g>div{grid-template-columns:26px 1.5fr 1.2fr .8fr}
+  .rank.g span:nth-of-type(1){text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .myrank{margin:0 0 6px;font-size:13px;color:#744a37}.myrank b{font-weight:400;color:#9b3d2a}
+  .gmsg{font-size:13px;color:#9b3d2a;margin:6px 0}
   .stars{font-size:34px;letter-spacing:4px;margin:2px 0 8px;color:var(--gold);text-shadow:0 2px 0 #e0a100}
 </style>
 </head>
@@ -282,7 +286,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v0.9.1';
+const VERSION = 'v1.0';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1122,11 +1126,6 @@ function showCard(html,view='dialog'){
 }
 const soundRow=()=>`<div class="row"><button class="btn sub" data-act="sfx">효과음 ${progress.sfxOff?'꺼짐':'켜짐'}</button><button class="btn sub" data-act="bgm">배경음 ${progress.bgmOff?'꺼짐':'켜짐'}</button></div>`;
 let titlePage=-1, resetArmed=false;
-function rankTable(mark){
-  const r=progress.rank||[];
-  if(!r.length) return '<div class="rank empty">아직 기록이 없어요</div>';
-  return '<div class="rank">'+r.map((e,i)=>`<div class="${e===mark?'me':''}"><b>${i+1}</b><span>${e.s.toLocaleString()}점</span><span>${fmtTime(e.t)}</span><span>손님 ${e.n}</span></div>`).join('')+'</div>';
-}
 function showTitle(){
   document.getElementById('hud').hidden=true;
   const tab=progress.tab==='endless'?'endless':'stage';
@@ -1142,12 +1141,13 @@ function showTitle(){
       <div class="row pager"><button class="btn sub" data-act="prev" ${titlePage<=0?'disabled':''}>◀</button><div class="pg">${from}–${to} / ${MAX_STAGE}</div><button class="btn sub" data-act="nextpage" ${titlePage>=pages-1?'disabled':''}>▶</button></div>`;
   }else{
     body=`<p>기다리던 손님이 떠나면 하트를 하나 잃어요.</p>
-      <button class="btn" data-act="endless">무한 모드 시작</button><h3>내 순위 TOP 10</h3>${rankTable()}`;
+      <button class="btn" data-act="endless">무한 모드 시작</button>${gRankBox()}`;
   }
   authBack='title';
   showCard(`<div class="menu-banner"><h2>모드 선택</h2></div>${accountRow(true)}${tabs}${body}${soundRow()}
     <button class="btn sub small" data-act="splash">← 타이틀 화면</button>
     <div class="ver">열린 스테이지 ${Math.min(progress.unlocked,MAX_STAGE)} / ${MAX_STAGE}</div>`,'menu');
+  if(tab==='endless') loadGlobalRank();
 }
 // ---- 타이틀 화면 ----
 const splash=document.getElementById('splash'), art=document.getElementById('art'), doors=document.getElementById('doors');
@@ -1349,19 +1349,26 @@ const NICK_RE=/^[가-힣a-zA-Z0-9_]{2,10}$/;
 function showNickname(msg=''){
   uiScreen='nickname';
   const u=currentUser();
-  showCard(`<h2>닉네임 정하기</h2><p>랭킹에 보일 이름이에요. <b>한 번 정하면 바꿀 수 없어요.</b><br>한글·영문·숫자·밑줄(_) 2~10자</p>
+  showCard(`<h2>닉네임 정하기</h2><p>전체 순위에 보일 이름이에요. 다른 사람과 겹칠 수 없고,<br><b>한 번 정하면 바꿀 수 없어요.</b> 한글·영문·숫자·밑줄(_) 2~10자</p>
     <input class="field" id="nickInput" maxlength="10" autocomplete="off" spellcheck="false" placeholder="닉네임" value="${esc((u&&u.name||'').replace(/[^가-힣a-zA-Z0-9_]/g,'').slice(0,10))}">
     <div class="err" id="nickErr">${esc(msg)}</div>
     <button class="btn" data-act="nick-save">이 이름으로 정하기</button>
     <button class="btn sub small" data-act="logout">다른 계정으로 로그인 (로그아웃)</button>`);
   setTimeout(()=>{ const i=document.getElementById('nickInput'); i&&i.focus(); },60);
 }
-function saveNickname(){
-  const i=document.getElementById('nickInput'), v=(i&&i.value||'').trim();
-  if(!NICK_RE.test(v)){ const er=document.getElementById('nickErr'); er.textContent='한글·영문·숫자·밑줄(_)로 2~10자를 입력해 주세요.'; i.classList.remove('shake'); void i.offsetWidth; i.classList.add('shake'); return; }
-  const u=auth.session; if(!u) return;
-  auth.accounts[u.uid]=Object.assign(auth.accounts[u.uid]||{},{nickname:v,nickAt:Date.now()}); authStore.set(auth);
-  afterAuth();
+let nickBusy=false;
+async function saveNickname(){
+  const i=document.getElementById('nickInput'), v=(i&&i.value||'').trim(), er=document.getElementById('nickErr');
+  const bad=m=>{ er.textContent=m; i.classList.remove('shake'); void i.offsetWidth; i.classList.add('shake'); };
+  if(!NICK_RE.test(v)) return bad('한글·영문·숫자·밑줄(_)로 2~10자를 입력해 주세요.');
+  const u=auth.session; if(!u||nickBusy) return;
+  nickBusy=true; er.textContent='확인하는 중…';
+  try{
+    const api=await fb(), r=await api.createPlayer(pidOf(u.uid),u.provider,v);
+    if(!r.ok&&r.reason==='taken') return bad('이미 다른 사람이 쓰는 닉네임이에요.');
+    cacheNickname(v); await flushPending(); afterAuth();
+  }catch(e){ console.warn('[nick]',e); bad('닉네임을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'); }
+  finally{ nickBusy=false; }
 }
 function afterAuth(){                    // 로그인/닉네임 설정이 끝난 뒤 원래 화면으로 돌아간다
   authMsg='';
@@ -1375,12 +1382,16 @@ function afterAuth(){                    // 로그인/닉네임 설정이 끝난
 const DEV_PASSWORD='2222';
 let devUnlocked=false, devArmed='';
 const DEV_TOOLS=[
-  {id:'reset-progress',label:'게임 기록 초기화',desc:'스테이지 진행, 최고 기록, 무한 모드 순위',danger:true,
+  {id:'reset-progress',label:'게임 기록 초기화',desc:'이 브라우저의 스테이지 진행·최고 기록 (전체 순위는 그대로)',danger:true,
    run(){ progress={unlocked:1,cleared:0,best:{},rank:[],tab:progress.tab,sfxOff:progress.sfxOff,bgmOff:progress.bgmOff}; save.set(progress); titlePage=0; return '게임 기록을 지웠어요.'; }},
   {id:'reset-auth',label:'로그인 기록 초기화',desc:'현재 로그인과 이 브라우저에 저장된 모든 계정·닉네임',danger:true,
-   run(){ logout(); auth={session:null,accounts:{}}; authStore.set(auth); try{ localStorage.removeItem('sushi-oauth'); }catch(e){} return '로그인 기록을 지웠어요.'; }},
-  {id:'reset-nick',label:'내 닉네임 다시 정하기',desc:'현재 계정의 닉네임을 지우고 설정 화면을 다시 띄워요',danger:true,
-   run(){ const u=auth.session; if(!u) return '로그인한 계정이 없어요.'; delete auth.accounts[u.uid].nickname; authStore.set(auth); authBack='settings'; showNickname(); return null; }},
+   run(){ logout(); auth={session:null,accounts:{}}; authStore.set(auth); pendingScore.clear(); try{ localStorage.removeItem('sushi-oauth'); }catch(e){} return '로그인 기록을 지웠어요. (Firebase 의 닉네임·순위는 그대로예요)'; }},
+  {id:'fb-check',label:'Firebase 연결 확인',desc:'익명 로그인, 내 닉네임, 전체 순위 읽기를 확인해요',
+   run(){ showDev('확인하는 중…');
+     (async()=>{ try{ const api=await fb(); await api.ready(); const u=auth.session; const p=u?await api.getPlayer(pidOf(u.uid)):null; const t=await api.top(10);
+       showDev(`연결됨 · 익명 uid ${api.uid().slice(0,6)}… · 내 닉네임 ${p?p.nickname:'없음'} · 순위 ${t.length}명`); }
+       catch(e){ showDev('연결 실패: '+(e.code||e.message)); } })();
+     return null; }},
   {id:'unlock-all',label:'전체 스테이지 열기',desc:`1~${MAX_STAGE} 스테이지를 모두 열어요`,
    run(){ progress.unlocked=MAX_STAGE; save.set(progress); return `스테이지 ${MAX_STAGE}개를 모두 열었어요.`; }},
   {id:'auth-info',label:'로그인 연동 정보',desc:()=>`등록할 주소: ${REDIRECT_URI}`,
@@ -1400,7 +1411,7 @@ function showDev(msg=''){
   const rows=DEV_TOOLS.map(t=>`<div class="tool"><div><b>${esc(t.label)}</b><small>${esc(typeof t.desc==='function'?t.desc():t.desc)}</small></div>
     <button class="btn ${t.danger?'':'sub'} ${devArmed===t.id?'armed':''}" data-act="dev-tool" data-tool="${t.id}">${devArmed===t.id?'한 번 더':'실행'}</button></div>`).join('');
   showCard(`<h2>개발자용<span class="devbadge">${VERSION}</span></h2>
-    <p>로그인: ${u?`${esc(u.nickname||'(닉네임 없음)')} · ${PROVIDERS[u.provider].label}`:'없음'} · 저장된 계정 ${Object.keys(auth.accounts).length}개<br>열린 스테이지 ${Math.min(progress.unlocked,MAX_STAGE)} · 무한 모드 기록 ${(progress.rank||[]).length}개</p>
+    <p>로그인: ${u?`${esc(u.nickname||'(닉네임 없음)')} · ${PROVIDERS[u.provider].label}`:'없음'} · 저장된 계정 ${Object.keys(auth.accounts).length}개<br>열린 스테이지 ${Math.min(progress.unlocked,MAX_STAGE)}</p>
     <div class="dev">${rows}</div><div class="err">${esc(msg)}</div>
     <button class="btn sub" data-act="auth-back">설정으로</button>`);
 }
@@ -1410,6 +1421,65 @@ function runDevTool(id){
   devArmed='';
   const r=t.run(); if(r!==null) showDev(r);
 }
+
+/* =====================================================================
+   11. Firebase — 닉네임과 무한 모드 전체 순위 (firebase.js 가 window.fbApi 를 채운다)
+   ===================================================================== */
+function fb(){
+  if(window.fbApi) return Promise.resolve(window.fbApi);
+  return new Promise((res,rej)=>{ addEventListener('fb-ready',()=>res(window.fbApi),{once:true}); setTimeout(()=>rej(new Error('firebase-timeout')),12000); });
+}
+const pidOf=uid=>uid.replace(':','_');
+function cacheNickname(nick){ const u=auth.session; if(!u) return; auth.accounts[u.uid]=Object.assign(auth.accounts[u.uid]||{},{nickname:nick}); authStore.set(auth); }
+// 로그인 직후: 이 계정이 Firebase 에 이미 닉네임이 있으면 그대로 쓰고, 없으면 닉네임 화면을 띄운다.
+async function syncPlayer(){
+  const u=auth.session; if(!u) return 'none';
+  const api=await fb(), p=await api.getPlayer(pidOf(u.uid));
+  if(p){ cacheNickname(p.nickname); return 'ok'; }
+  if(auth.accounts[u.uid]) delete auth.accounts[u.uid].nickname; authStore.set(auth);
+  return 'need';
+}
+// 로그인 전에 끝낸 무한 모드 기록은 잠시 보관했다가 로그인하면 올린다.
+const pendingScore={
+  get(){ try{ const o=JSON.parse(localStorage.getItem('sushi-pending')||'null'); return o&&Date.now()-o.at<86400000?o:null; }catch(e){ return null; } },
+  set(e){ const o=this.get(); if(!o||e.s>o.s) try{ localStorage.setItem('sushi-pending',JSON.stringify(Object.assign({at:Date.now()},e))); }catch(x){} },
+  clear(){ try{ localStorage.removeItem('sushi-pending'); }catch(e){} },
+};
+async function submitScore(e){
+  const u=currentUser(); if(!u||!u.nickname) return {skipped:true};
+  const api=await fb();
+  return api.submit(pidOf(u.uid),u.nickname,{score:e.s,time:e.t,served:e.n});
+}
+async function flushPending(){
+  const e=pendingScore.get(); if(!e) return null;
+  try{ const r=await submitScore(e); if(!r.skipped) pendingScore.clear(); return r; }catch(x){ console.warn('[rank]',x); return null; }
+}
+function setHtml(id,html){ const el=document.getElementById(id); if(el) el.outerHTML=html; }
+const gRankBox=()=>`<h3>전체 순위 TOP 10</h3><div id="gMine"></div><div id="gRank" class="rank empty">불러오는 중…</div>`;
+async function loadGlobalRank(){
+  const u=currentUser(), me=u?pidOf(u.uid):null;
+  try{
+    const api=await fb(), [list,mine]=await Promise.all([api.top(10), me?api.mine(me):null]);
+    setHtml('gRank',!list.length?'<div id="gRank" class="rank empty">아직 등록된 기록이 없어요</div>':
+      '<div id="gRank" class="rank g">'+list.map((e,i)=>`<div class="${e.pid===me?'me':''}"><b>${i+1}</b><span>${esc(e.name)}</span><span>${e.score.toLocaleString()}점</span><span>손님 ${e.served}</span></div>`).join('')+'</div>');
+    setHtml('gMine',`<div id="gMine" class="myrank">${!u?'로그인하면 내 기록이 순위에 올라가요.':mine?`내 최고 <b>${mine.score.toLocaleString()}점</b> · 전체 <b>${mine.rank}위</b> · 생존 ${fmtTime(mine.time)}`:`${esc(u.nickname||'')} 님은 아직 등록된 기록이 없어요.`}</div>`);
+  }catch(e){ console.warn('[rank]',e); setHtml('gRank','<div id="gRank" class="rank empty">전체 순위를 불러오지 못했어요</div>'); setHtml('gMine','<div id="gMine"></div>'); }
+}
+async function submitResult(g){
+  const u=currentUser();
+  if(!u||!u.nickname){
+    pendingScore.set(g.entry);
+    setHtml('gSubmit',`<div id="gSubmit"><p class="gmsg">로그인하면 이 기록이 전체 순위에 등록돼요.</p><button class="btn" data-act="login">로그인하고 기록 올리기</button></div>`);
+    return loadGlobalRank();
+  }
+  setHtml('gSubmit','<div id="gSubmit"><p class="gmsg">전체 순위에 등록하는 중…</p></div>');
+  try{
+    const r=await submitScore(g.entry);
+    setHtml('gSubmit',`<div id="gSubmit"><p class="gmsg">${r.improved?`최고 기록을 갱신했어요! 전체 순위에 등록됐어요.`:`내 최고 기록 ${r.best.toLocaleString()}점을 넘지 못했어요.`}</p></div>`);
+  }catch(e){ console.warn('[rank]',e); pendingScore.set(g.entry);
+    setHtml('gSubmit','<div id="gSubmit"><p class="gmsg">기록을 등록하지 못했어요. 다음에 접속하면 다시 올릴게요.</p></div>'); }
+  loadGlobalRank();
+}
 function showPause(){
   showCard(`<div class="pause-banner"><div><h2>잠시 멈춤</h2><p>${G.endless?`무한 모드 · ${G.score.toLocaleString()}점 · ${fmtTime(G.time)}`:`STAGE ${G.stage} · ${G.delivered}/${G.total}`}</p></div><img src="assets/restaurant/gyuri_serve.webp" alt=""></div>
     <button class="btn" data-act="resume">계속하기</button><button class="btn sub" data-act="retry">다시 시작</button>${soundRow()}
@@ -1417,14 +1487,17 @@ function showPause(){
 }
 function showResult(){
   if(G.endless){
-    if(!G.entry){ G.entry={s:G.score,t:Math.floor(G.time),n:G.served,d:Date.now()};
-      progress.rank=(progress.rank||[]).concat(G.entry).sort((a,b)=>b.s-a.s||b.t-a.t).slice(0,10); save.set(progress); }
-    const pos=progress.rank.indexOf(G.entry)+1;
-    return showCard(`<h2>${G.failReason==='lives'?'손님을 너무 많이 놓쳤어요':'게임 오버'}</h2>
+    const first=!G.entry;
+    if(first) G.entry={s:G.score,t:Math.floor(G.time),n:G.served};
+    showCard(`<h2>${G.failReason==='lives'?'손님을 너무 많이 놓쳤어요':'게임 오버'}</h2>
       ${G.failReason==='full'?'<p>레일과 조리 대기열이 가득 찼어요.</p>':''}
       <div class="score">${G.score.toLocaleString()}<small>점</small></div>
-      <p>생존 ${fmtTime(G.time)} · 손님 ${G.served}명 · ${pos?`<b>${pos}위</b>${pos===1?' 최고 기록!':''}`:'순위권 밖'}</p>${rankTable(G.entry)}
-      <button class="btn" data-act="retry">다시 도전</button><button class="btn sub" data-act="title">모드 선택</button>`);
+      <p>생존 ${fmtTime(G.time)} · 손님 ${G.served}명</p>
+      <div id="gSubmit"></div>
+      <button class="btn" data-act="retry">다시 도전</button><button class="btn sub" data-act="title">모드 선택</button>
+      ${gRankBox()}`);
+    if(first&&G.entry.s>0) return submitResult(G);
+    return loadGlobalRank();
   }
   if(G.state==='clear'){
     const last=G.stage>=MAX_STAGE;
@@ -1451,7 +1524,7 @@ card.addEventListener('click',e=>{
     else { resetArmed=false; progress={unlocked:1,cleared:0,best:{},rank:[],tab:progress.tab,sfxOff:progress.sfxOff,bgmOff:progress.bgmOff}; save.set(progress); titlePage=0; refresh(); }
   }
   else if(a==='close'){ uiScreen='splash'; hideOverlay(); }
-  else if(a==='login'){ authMsg=''; showLogin(); }
+  else if(a==='login'){ authMsg=''; if(G&&G.endless){ authBack='title'; progress.tab='endless'; save.set(progress); } showLogin(); }
   else if(a&&a.startsWith('login-')) startLogin(a.slice(6));
   else if(a==='logout'){ logout(); afterAuth(); }
   else if(a==='nick-save') saveNickname();
@@ -1495,14 +1568,20 @@ function frame(t){
   draw();
   requestAnimationFrame(frame);
 }
-window.__game={ get G(){return G;}, get auth(){return auth;}, DEV_TOOLS, REDIRECT_URI, END, buildVerified, buildStage, solvable, tapColumn, startStage, count, update };   // 디버그/테스트용
+window.__game={ get G(){return G;}, pendingScore, syncPlayer, get auth(){return auth;}, DEV_TOOLS, REDIRECT_URI, END, buildVerified, buildStage, solvable, tapColumn, startStage, count, update };   // 디버그/테스트용
 layout();
 const fontReady=(document.fonts&&document.fonts.load)?Promise.race([document.fonts.load('20px Jua').catch(()=>{}),new Promise(r=>setTimeout(r,1500))]):Promise.resolve();
 Promise.all([loadAssets(),fontReady,handleAuthCallback()]).then(([,,cb])=>{
   showSplash(); requestAnimationFrame(frame);
-  if(cb==='ok'){ const u=currentUser(); if(!u.nickname) showNickname(); else afterAuth(); }   // 첫 로그인이면 닉네임부터
+  if(cb==='ok'){                       // 로그인 직후: Firebase 에 닉네임이 있으면 이어 쓰고, 없으면 바로 닉네임 설정
+    showCard('<h2>로그인 중…</h2><p>계정 정보를 확인하고 있어요.</p>');
+    syncPlayer().then(r=>{ if(r==='need') showNickname(); else { flushPending(); afterAuth(); } })
+      .catch(e=>{ console.warn('[auth]',e); authMsg='순위 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.'; logout(); showLogin(); });
+  }
   else if(cb==='fail') showLogin();
+  else if(auth.session) syncPlayer().then(r=>{ if(r==='ok') flushPending(); }).catch(()=>{});   // 다른 기기에서 정한 닉네임 반영
 });
 </script>
+<script type="module" src="firebase.js"></script>
 </body>
 </html>

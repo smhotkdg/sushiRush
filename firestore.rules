@@ -1,0 +1,82 @@
+rules_version = '2';
+
+// ===============================================================
+// 데이터 구조
+// ===============================================================
+// players/{pid}       게임 계정 1개 = 문서 1개. pid = "kakao_123", "naver_abc", "google_456"
+//   pid, provider, nickname(2~10자), createdAt        — 만든 뒤에는 바꿀 수 없다
+// nicknames/{key}     닉네임 중복 방지. key = 닉네임 소문자
+//   pid, createdAt
+// leaderboard/{pid}   무한 모드 최고 기록. 플레이어당 1개
+//   pid, name(= players 닉네임), score, time(초), served(손님 수), updatedAt
+//
+// 앱이 실행하는 쿼리
+//   leaderboard orderBy(score desc) limit(10)
+//   leaderboard where(score > X) count()      — 내 순위
+//
+// 주의: 지금은 게임 로그인(카카오·네이버·구글)을 서버에서 검증하지 않고, Firebase 에는 익명으로
+// 로그인한다. 그래서 규칙은 "형식·범위·점수 증가"만 강제한다. 서버(Functions)로 커스텀 토큰을
+// 발급하게 되면 request.auth.uid == pid 조건을 추가해 본인만 쓰도록 바꾼다.
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function validPid(pid) { return pid.matches('^(kakao|naver|google)_[A-Za-z0-9_-]{1,64}$'); }
+    function validNick(n) { return n is string && n.matches('^[가-힣a-zA-Z0-9_]{2,10}$'); }
+    function intIn(v, lo, hi) { return v is int && v >= lo && v <= hi; }
+
+    match /players/{pid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validPid(pid)
+        && request.resource.data.keys().hasOnly(['pid', 'provider', 'nickname', 'createdAt'])
+        && request.resource.data.keys().hasAll(['pid', 'provider', 'nickname', 'createdAt'])
+        && request.resource.data.pid == pid
+        && request.resource.data.provider in ['kakao', 'naver', 'google']
+        && pid.split('_')[0] == request.resource.data.provider
+        && validNick(request.resource.data.nickname)
+        && request.resource.data.createdAt == request.time
+        // 같은 배치에서 닉네임 예약 문서도 함께 만들어야 한다
+        && getAfter(/databases/$(database)/documents/nicknames/$(request.resource.data.nickname.lower())).data.pid == pid;
+      allow update, delete: if false;
+    }
+
+    match /nicknames/{key} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['pid', 'createdAt'])
+        && request.resource.data.keys().hasAll(['pid', 'createdAt'])
+        && request.resource.data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/players/$(request.resource.data.pid)).data.nickname.lower() == key;
+      allow update, delete: if false;
+    }
+
+    match /leaderboard/{pid} {
+      allow read: if signedIn();
+
+      function validEntry(d) {
+        let player = get(/databases/$(database)/documents/players/$(pid)).data;
+        return d.keys().hasOnly(['pid', 'name', 'score', 'time', 'served', 'updatedAt'])
+          && d.keys().hasAll(['pid', 'name', 'score', 'time', 'served', 'updatedAt'])
+          && d.pid == pid
+          && d.name == player.nickname
+          && intIn(d.score, 1, 10000000)
+          && intIn(d.time, 0, 86400)
+          && intIn(d.served, 0, 100000)
+          // 손님 1명당 점수는 300점을 넘을 수 없고, 손님은 1초에 1명보다 빨리 받을 수 없다
+          && d.score <= (d.served + 1) * 300
+          && d.served <= d.time + 5
+          && d.updatedAt == request.time;
+      }
+
+      allow create: if signedIn() && validPid(pid)
+        && exists(/databases/$(database)/documents/players/$(pid))
+        && validEntry(request.resource.data);
+      allow update: if signedIn()
+        && validEntry(request.resource.data)
+        && request.resource.data.score > resource.data.score;
+      allow delete: if false;
+    }
+  }
+}
