@@ -286,7 +286,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.0.1';
+const VERSION = 'v1.0.2';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1340,13 +1340,14 @@ function accountRow(compact){
   if(!u) return `<div class="acct"><div class="who">로그인하지 않았어요<small>로그인하면 무한 모드 랭킹에 참여할 수 있어요</small></div><button class="btn" data-act="login">로그인</button></div>`;
   return `<div class="acct">${pvBadge(u.provider)}<div class="who">${esc(u.nickname||'닉네임 미설정')}<small>${PROVIDERS[u.provider].label} 계정${compact?'':' 로그인 중'}</small></div><button class="btn sub" data-act="logout">로그아웃</button></div>`;
 }
+const authView=()=>authBack==='title'?'menu':'dialog';
 function showLogin(){
   uiScreen='login';
   const b=(p,t)=>`<button class="${p}" data-act="login-${p}">${ICONS[p]}<span>${t}</span></button>`;
   showCard(`<h2>로그인</h2><p>로그인하면 기록이 계정에 연결되고, 무한 모드 랭킹에 참여할 수 있어요.</p>
     <div class="login">${b('kakao','카카오 로그인')}${b('naver','네이버 로그인')}${b('google','Google 계정으로 로그인')}</div>
     <div class="err">${esc(authMsg)}</div>
-    <button class="btn sub" data-act="auth-back">돌아가기</button>`,authBack==='title'?'menu':'dialog');
+    <button class="btn sub" data-act="auth-back">돌아가기</button>`,authView());
 }
 const NICK_RE=/^[가-힣a-zA-Z0-9_]{2,10}$/;
 function showNickname(msg=''){
@@ -1356,7 +1357,7 @@ function showNickname(msg=''){
     <input class="field" id="nickInput" maxlength="10" autocomplete="off" spellcheck="false" placeholder="닉네임" value="${esc((u&&u.name||'').replace(/[^가-힣a-zA-Z0-9_]/g,'').slice(0,10))}">
     <div class="err" id="nickErr">${esc(msg)}</div>
     <button class="btn" data-act="nick-save">이 이름으로 정하기</button>
-    <button class="btn sub small" data-act="logout">다른 계정으로 로그인 (로그아웃)</button>`);
+    <button class="btn sub small" data-act="logout">다른 계정으로 로그인 (로그아웃)</button>`,authView());
   setTimeout(()=>{ const i=document.getElementById('nickInput'); i&&i.focus(); },60);
 }
 let nickBusy=false;
@@ -1575,15 +1576,31 @@ window.__game={ get G(){return G;}, pendingScore, syncPlayer, get auth(){return 
 layout();
 const fontReady=(document.fonts&&document.fonts.load)?Promise.race([document.fonts.load('20px Jua').catch(()=>{}),new Promise(r=>setTimeout(r,1500))]):Promise.resolve();
 Promise.all([loadAssets(),fontReady,handleAuthCallback()]).then(([,,cb])=>{
-  showSplash(); requestAnimationFrame(frame);
+  // 모드 선택(또는 무한 모드 결과)에서 로그인하고 돌아왔으면 타이틀을 건너뛰고 그 자리로 돌아간다.
+  if(cb&&authBack==='title'){ hideSplash(); uiScreen='title'; } else showSplash();
+  requestAnimationFrame(frame);
   if(cb==='ok'){                       // 로그인 직후: Firebase 에 닉네임이 있으면 이어 쓰고, 없으면 바로 닉네임 설정
-    showCard('<h2>로그인 중…</h2><p>계정 정보를 확인하고 있어요.</p>');
+    showCard('<h2>로그인 중…</h2><p>계정 정보를 확인하고 있어요.</p>',authView());
     syncPlayer().then(r=>{ if(r==='need') showNickname(); else { flushPending(); afterAuth(); } })
       .catch(e=>{ console.warn('[auth]',e); authMsg='순위 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.'; logout(); showLogin(); });
   }
   else if(cb==='fail') showLogin();
   else if(auth.session) syncPlayer().then(r=>{ if(r==='ok') flushPending(); }).catch(()=>{});   // 다른 기기에서 정한 닉네임 반영
+  if(!cb) checkUpdate();
 });
+async function checkUpdate(){
+  if(!/^https:/.test(location.protocol)) return;
+  try{
+    const html=await fetch(location.pathname,{cache:'reload'}).then(r=>r.ok?r.text():'');
+    const v=(html.match(/const VERSION = '([^']+)'/)||[])[1];
+    if(!v||v===VERSION) return;
+    let tried=''; try{ tried=sessionStorage.getItem('sushi-updated')||''; }catch(e){}
+    if(tried===v) return;                                   // 같은 버전으로 두 번 새로고침하지 않는다
+    try{ sessionStorage.setItem('sushi-updated',v); }catch(e){}
+    await Promise.all(['index.html','firebase.js'].map(f=>fetch(f,{cache:'reload'}).catch(()=>{})));
+    if(!G) location.reload();                               // 게임 중이면 다음에 열 때 반영된다
+  }catch(e){}
+}
 </script>
 <script type="module" src="firebase.js"></script>
 </body>
