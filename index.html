@@ -394,7 +394,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.5.0';
+const VERSION = 'v1.5.1';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1306,7 +1306,7 @@ function update(dt){
         const travelTime=rush?RUSH_SERVE_TIME:SERVE_TIME;
         G.slots[i]={type:G.ready,born:G.time,travelTime,gold:G.readyGold}; G.readyGold=false;
         // 초밥이 레일에 닿기 전에는 다음 조리 동작을 시작하지 않는다.
-        G.ready=null; G.chefServe=travelTime; sfx.pop();
+        G.ready=null; G.chefServe=G.chefServeDuration=travelTime; sfx.pop();
       }
       continue;
     }
@@ -1354,6 +1354,8 @@ function rr(g,x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2)); g.beginPath(); g.mo
 const circle=(x,y,r)=>{ ctx.beginPath(); ctx.arc(x,y,Math.max(0,r),0,Math.PI*2); };
 const oval=(x,y,rx,ry)=>{ ctx.beginPath(); ctx.ellipse(x,y,Math.max(0,rx),Math.max(0,ry),0,0,Math.PI*2); };
 const easeOut=t=>1-Math.pow(1-t,3);
+const smoothStep=t=>t*t*(3-2*t);
+const motionPulse=t=>Math.sin(Math.PI*clamp(t,0,1))**2;
 function sprite(img,x,y,size){ ctx.drawImage(img,x-size/2,y-size/2,size,size); }
 
 function drawArt(img,x,y,w,h){
@@ -1456,6 +1458,7 @@ function orderBox(p,cs){
   return {minY,maxY:my,minX,maxX,left};
 }
 function drawOrderCard(s,p,cs,t,scale){
+  const reaction=reduceMotion.matches?0:motionPulse(s.bump);
   const r=cs*0.44, items=s.items, n=items.length, rowH=r*0.86, cw=r*1.9, tail=r*0.3;
   const hasPatience=s.patMax>0, padT=r*0.2, padB=r*0.12, ch=padT+n*rowH+padB+(hasPatience?r*0.3:0);
   const dir=p.x>p.bx?1:-1, B=orderBox(p,cs);
@@ -1497,10 +1500,10 @@ function drawOrderCard(s,p,cs,t,scale){
     ctx.fillStyle=done?'#e7efe1':'#f6e0c4'; ctx.beginPath(); ctx.ellipse(px,ry+rowH*0.17,pr,pr*0.42,0,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle=done?'#b9d0ad':'#e7c39c'; ctx.lineWidth=Math.max(1,r*0.035); ctx.stroke();
     ctx.save(); if(done) ctx.globalAlpha*=0.4;
-    sprite(SPR.sushi[it.type],px,ry-rowH*0.02,rowH*0.98*(1+s.bump*0.06));
+    sprite(SPR.sushi[it.type],px,ry-rowH*0.02,rowH*0.98*(1+reaction*0.06));
     ctx.restore();
     // 개수 칩
-    const cx=left+cw*0.725, w=cw*0.44, h=rowH*0.6, k=1+s.bump*0.1;
+    const cx=left+cw*0.725, w=cw*0.44, h=rowH*0.6, k=1+reaction*0.1;
     ctx.save(); ctx.translate(cx,ry); ctx.scale(k,k);
     const base=done?'#4f9a5f':TH.chip, g=ctx.createLinearGradient(0,-h/2,0,h/2);
     g.addColorStop(0,shade(base,0.18)); g.addColorStop(1,shade(base,-0.12));
@@ -1619,14 +1622,18 @@ function idleFrame(frames,offset){
 function drawSeat(i){
   const s=G.seats[i]; if(!s) return;
   const p=L.seat[i], cs=L.cs, dir=p.top?1:-1;
-  const k=s.leaving?1-easeOut(Math.min(1,s.out)):easeOut(s.in);
-  ctx.save(); ctx.globalAlpha=clamp(k*1.4,0,1);
-  const y=p.y+dir*(1-k)*cs*0.7 - Math.sin(s.bump*Math.PI)*cs*0.07;
+  const k=s.leaving?1-smoothStep(clamp(s.out,0,1)):smoothStep(s.in);
+  const still=reduceMotion.matches;
+  const reaction=still?0:motionPulse(s.bump);
+  const breathe=still?0:k*Math.sin(G.time*2.5+i*1.4);
+  const y=p.y+(still?0:dir*(1-k)*cs*0.7-reaction*cs*0.06);
   const happy=(s.leaving&&!s.angry)||s.bump>0||s.waitDone;
+  const poseHappy=happy&&(still||s.bump<=0.8);
+  ctx.save(); ctx.globalAlpha=k;
   const angry=s.angry||(s.patMax&&s.pat/s.patMax<0.25);
   const guest=SPR.guests[s.look.guest];
   const waiting=s.in>=1&&!s.leaving&&!happy;
-  const portrait=happy?guest?.happy:angry?guest?.angry:waiting?idleFrame(guest,1.4+i*0.78):guest?.idle;
+  const portrait=poseHappy?guest?.happy:angry?guest?.angry:waiting?idleFrame(guest,1.4+i*0.78):guest?.idle;
   const side=cs*1.23;
   if(s.kind==='vip'||s.kind==='rush'){                  // 특별 손님 후광
     const col=s.kind==='vip'?'255,206,70':'120,150,230', pul=0.55+0.25*Math.sin(G.time*5+i);
@@ -1634,8 +1641,10 @@ function drawSeat(i){
     gr.addColorStop(0,`rgba(${col},${0.55*pul})`); gr.addColorStop(1,`rgba(${col},0)`);
     ctx.fillStyle=gr; circle(p.x,y,side*0.62); ctx.fill();
   }
-  if(!drawArt(portrait||guest?.idle,p.x-side/2,y-cs*0.58,side,side)){
-    drawPerson(p.x,y,cs,s.look,{happy,angry});
+  // Keep the feet anchored as the portrait squashes and stretches.
+  const width=side*(1-reaction*0.04), height=side*(1+reaction*0.06+breathe*0.012);
+  if(!drawArt(portrait||guest?.idle,p.x-width/2,y-cs*0.58+side-height,width,height)){
+    drawPerson(p.x,y,cs,s.look,{happy:poseHappy,angry});
   }
   if(s.grp) partyHat(p.x+(p.x<W/2?cs*0.08:-cs*0.08),y-cs*0.42,cs,p.x<W/2?-0.22:0.22,i);
   ctx.restore();
@@ -1674,8 +1683,10 @@ function drawBelt(){
   // 주방장과 도구는 벨트 테두리 앞에 표시한다.
   const cooking=G.cookTime!==null;
   const serving=G.chefServe>0;
-  const stroke=cooking&&!reduceMotion.matches?Math.sin(Math.PI*G.cookTime/COOK_TIME):0;
-  const reach=serving&&!reduceMotion.matches?G.chefServe/SERVE_TIME:0;
+  const still=reduceMotion.matches;
+  const stroke=cooking&&!still?motionPulse(G.cookTime/COOK_TIME):0;
+  const reach=serving&&!still?motionPulse(G.chefServe/G.chefServeDuration):0;
+  const breathe=still?0:Math.sin(G.time*2.4)*0.008;
   const chefSize=Math.min(I.h*1.24,I.w*0.62);
   // 조리가 끝나면 완료 자세를 유지하고, 레일에 올린 뒤에만 기본 자세로 돌아간다.
   const pose=G.skillT>0&&SPR.chef.skill?'skill':cooking?'cook':G.ready!==null||serving?'serve':'idle';
@@ -1692,7 +1703,7 @@ function drawBelt(){
   ctx.save();
   ctx.translate(L.chef.x,chefBottom);
   ctx.rotate(stroke*0.075+reach*0.10);
-  ctx.scale(1+stroke*0.04,1-stroke*0.05);
+  ctx.scale(1+stroke*0.025,1-stroke*0.035+breathe);
   const portrait=pose==='idle'?idleFrame(SPR.chef,0.9):SPR.chef[pose];
   if(!drawArt(portrait||SPR.chef.idle,-chefSize/2,-chefSize,chefSize,chefSize)){
     drawPerson(0,L.chef.y-L.chef.s*0.12-chefBottom,L.chef.s,CHEF,{chef:true,happy:cooking});
@@ -1814,7 +1825,10 @@ const CHEF={skin:'#ffd3b0',skinD:'#eeb089',hairC:'#6b4433',hair:0,shirt:'#ff7a8a
 function draw(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.fillStyle=G?'#f0d6ad':'#ffe8d6'; ctx.fillRect(0,0,W,H);
-  if(G&&G.shake>0){ const a=G.shake*14*L.u; ctx.translate((Math.random()-0.5)*a,(Math.random()-0.5)*a); }
+  if(G&&G.shake>0&&!reduceMotion.matches){
+    const t=G.shake, a=t*8*L.u;
+    ctx.translate(Math.sin(t*72)*a,Math.sin(t*53)*a*0.45);
+  }
   ctx.fillStyle='rgba(255,170,150,.2)';
   for(let yy=L.playTop;yy<L.playBot;yy+=34) for(let xx=(Math.round(yy/34)%2)*17;xx<W;xx+=34){ circle(xx,yy,7); ctx.fill(); }
   if(!G) return;
