@@ -379,7 +379,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.3.4';
+const VERSION = 'v1.3.5';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1265,39 +1265,73 @@ function orderBox(p,cs){
   return {minY,maxY,minX,maxX,left};
 }
 function drawOrderCard(s,p,cs,t,scale){
-  const r=cs*0.44, items=s.items, n=items.length, rowH=r*0.86, cw=r*1.9, tail=r*0.32;
-  const hasPatience=s.patMax>0, ch=n*rowH+r*0.24+(hasPatience?r*0.3:0);
+  const r=cs*0.44, items=s.items, n=items.length, rowH=r*0.86, cw=r*1.9, tail=r*0.3;
+  const hasPatience=s.patMax>0, padT=r*0.2, padB=r*0.12, ch=padT+n*rowH+padB+(hasPatience?r*0.3:0);
   const dir=p.x>p.bx?1:-1, B=orderBox(p,cs);
   const fit=Math.min(1,(B.maxY-B.minY)/ch,(B.maxX-B.minX)/(cw+tail));
   const x=B.left?B.maxX-(tail+cw/2)*fit:B.minX+(tail+cw/2)*fit;
   const y=clamp(p.y-cs*0.05,B.minY+ch*fit/2,B.maxY-ch*fit/2);
+  // 손님 종류별 색: 보통(연어빛), VIP(금색), 급한 손님(남색)
+  const TH={vip:{edge:'#b8860b',band:'#f2c23a',chip:'#c98208'},rush:{edge:'#34477f',band:'#6f88cf',chip:'#3e5496'}}[s.kind]
+          ||{edge:'#c96748',band:'#f3957a',chip:'#e25b3a'};
+  const rad=r*0.3, lw=Math.max(1.6,r*0.075);
   ctx.save();
   ctx.globalAlpha*=0.65+t*0.35;
   ctx.translate(x,y); ctx.scale(scale*fit,scale*fit);
-  const left=-cw/2, top=-ch/2;
-  ctx.fillStyle='rgba(60,30,20,.25)'; rr(ctx,left,top+3,cw,ch,r*0.28); ctx.fill();
-  // 꼬리
-  ctx.fillStyle='#fffaf0'; ctx.strokeStyle='#e4705a'; ctx.lineWidth=Math.max(1.5,r*0.07);
-  const tx=dir>0?cw/2:-cw/2; ctx.beginPath(); ctx.moveTo(tx-dir*2,-r*0.18); ctx.lineTo(tx+dir*r*0.32,r*0.02); ctx.lineTo(tx-dir*2,r*0.2); ctx.closePath(); ctx.fill(); ctx.stroke();
-  rr(ctx,left,top,cw,ch,r*0.28); ctx.fill(); ctx.stroke();
-  ctx.fillStyle='#fffaf0'; ctx.fillRect(tx-dir*4,-r*0.16,4,r*0.34);
+  const left=-cw/2, top=-ch/2, tx=dir>0?cw/2:-cw/2;
+  // 그림자
+  ctx.fillStyle='rgba(90,45,25,.22)'; rr(ctx,left+1,top+r*0.12,cw,ch,rad); ctx.fill();
+  // 종이(위는 밝게, 아래는 따뜻하게)
+  const paper=ctx.createLinearGradient(0,top,0,top+ch); paper.addColorStop(0,'#fffdf7'); paper.addColorStop(1,'#fdeed8');
+  ctx.fillStyle=paper; ctx.strokeStyle=TH.edge; ctx.lineWidth=lw; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(tx-dir*2,-r*0.17); ctx.lineTo(tx+dir*tail,r*0.03); ctx.lineTo(tx-dir*2,r*0.21); ctx.closePath(); ctx.fill(); ctx.stroke();
+  rr(ctx,left,top,cw,ch,rad); ctx.fill(); ctx.stroke();
+  ctx.fillRect(tx-dir*(lw+2)-(dir>0?0:0),-r*0.15,lw+2,r*0.34);
+  // 윗단 띠 + 바느질 점선
+  ctx.save(); rr(ctx,left,top,cw,ch,rad); ctx.clip();
+  const bh=padT*0.62; ctx.fillStyle=TH.band; ctx.fillRect(left,top,cw,bh);
+  ctx.fillStyle='rgba(255,255,255,.35)'; ctx.fillRect(left,top,cw,bh*0.4);
+  ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=Math.max(1,r*0.035); ctx.setLineDash([r*0.08,r*0.07]);
+  ctx.beginPath(); ctx.moveTo(left+r*0.12,top+bh*0.55); ctx.lineTo(-left-r*0.12,top+bh*0.55); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+  // 안쪽 하이라이트
+  ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.lineWidth=1; rr(ctx,left+lw*0.9,top+lw*0.9,cw-lw*1.8,ch-lw*1.8,rad*0.8); ctx.stroke();
   items.forEach((it,j)=>{
-    const ry=top+r*0.12+rowH*(j+0.5), done=it.need<=0;
-    if(j>0){ ctx.strokeStyle='#f1d3bd'; ctx.lineWidth=1; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(left+r*0.15,ry-rowH/2); ctx.lineTo(-left-r*0.15,ry-rowH/2); ctx.stroke(); ctx.setLineDash([]); }
-    ctx.save(); if(done) ctx.globalAlpha*=0.35;
-    sprite(SPR.sushi[it.type],left+r*0.55,ry,rowH*1.02*(1+s.bump*0.06));
+    const ry=top+padT+rowH*(j+0.5), done=it.need<=0;
+    if(j>0){ ctx.strokeStyle='#efd5bb'; ctx.lineWidth=Math.max(1,r*0.035); ctx.setLineDash([r*0.05,r*0.08]); ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(left+r*0.18,ry-rowH/2); ctx.lineTo(-left-r*0.18,ry-rowH/2); ctx.stroke(); ctx.setLineDash([]); ctx.lineCap='butt'; }
+    // 접시
+    const px=left+r*0.52, pr=rowH*0.4;
+    ctx.fillStyle=done?'#e7efe1':'#f6e0c4'; ctx.beginPath(); ctx.ellipse(px,ry+rowH*0.17,pr,pr*0.42,0,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=done?'#b9d0ad':'#e7c39c'; ctx.lineWidth=Math.max(1,r*0.035); ctx.stroke();
+    ctx.save(); if(done) ctx.globalAlpha*=0.4;
+    sprite(SPR.sushi[it.type],px,ry-rowH*0.02,rowH*0.98*(1+s.bump*0.06));
     ctx.restore();
-    const fx=left+cw*0.7, fsz=rowH*0.62;
+    // 개수 칩
+    const cx=left+cw*0.725, w=cw*0.44, h=rowH*0.6, k=1+s.bump*0.1;
+    ctx.save(); ctx.translate(cx,ry); ctx.scale(k,k);
+    const base=done?'#4f9a5f':TH.chip, g=ctx.createLinearGradient(0,-h/2,0,h/2);
+    g.addColorStop(0,shade(base,0.18)); g.addColorStop(1,shade(base,-0.12));
+    ctx.fillStyle='rgba(80,35,20,.25)'; rr(ctx,-w/2,-h/2+h*0.1,w,h,h/2); ctx.fill();
+    ctx.fillStyle=g; rr(ctx,-w/2,-h/2,w,h,h/2); ctx.fill();
+    ctx.strokeStyle=shade(base,-0.3); ctx.lineWidth=Math.max(1,r*0.04); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,.28)'; rr(ctx,-w/2+h*0.18,-h/2+h*0.1,w-h*0.36,h*0.34,h*0.17); ctx.fill();
     ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
-    if(done){ ctx.fillStyle='#4d895b'; circle(fx,ry,fsz*0.55); ctx.fill(); ctx.fillStyle='#fff'; ctx.font=`${fsz*0.8}px ${FONT}`; ctx.fillText('✓',fx,ry+1); return; }
-    ctx.font=`${fsz}px ${POP_FONT}`;
-    ctx.strokeStyle='#fffaf0'; ctx.lineWidth=fsz*0.28; ctx.strokeText('×'+it.need,fx,ry+1);
-    ctx.fillStyle='#b23a26'; ctx.fillText('×'+it.need,fx,ry+1);
+    const label=done?'✓':'×'+it.need, fs=h*(done?0.95:0.84);
+    ctx.font=`${fs}px ${done?FONT:POP_FONT}`;
+    ctx.strokeStyle=shade(base,-0.35); ctx.lineWidth=fs*0.16; ctx.strokeText(label,0,h*0.05);
+    ctx.fillStyle='#fff'; ctx.fillText(label,0,h*0.05);
+    ctx.restore();
   });
   if(hasPatience){
-    const f=clamp(s.pat/s.patMax,0,1), bw=cw-r*0.36, bh=r*0.18, bl=-bw/2, bt=top+ch-r*0.3;
-    rr(ctx,bl,bt,bw,bh,bh/2); ctx.fillStyle='#dcc1a0'; ctx.fill();
-    ctx.save(); rr(ctx,bl,bt,bw,bh,bh/2); ctx.clip(); ctx.fillStyle=f>0.5?'#4d895b':f>0.25?'#cf871f':'#c54c42'; ctx.fillRect(bl,bt,bw*f,bh); ctx.restore();
+    const f=clamp(s.pat/s.patMax,0,1), bw=cw-r*0.34, bh=r*0.17, bl=-bw/2, bt=top+ch-padB-r*0.2;
+    rr(ctx,bl,bt,bw,bh,bh/2); ctx.fillStyle='#e3cdb0'; ctx.fill(); ctx.strokeStyle='#c9a983'; ctx.lineWidth=1; ctx.stroke();
+    const col=f>0.5?'#4f9a5f':f>0.25?'#e0952a':'#d4473b';
+    ctx.save(); rr(ctx,bl,bt,bw,bh,bh/2); ctx.clip();
+    const pg=ctx.createLinearGradient(0,bt,0,bt+bh); pg.addColorStop(0,shade(col,0.2)); pg.addColorStop(1,shade(col,-0.1));
+    ctx.fillStyle=pg; ctx.fillRect(bl,bt,bw*f,bh);
+    ctx.fillStyle='rgba(255,255,255,.35)'; ctx.fillRect(bl,bt+bh*0.12,bw*f,bh*0.28);
+    ctx.restore();
   }
   ctx.restore();
 }
