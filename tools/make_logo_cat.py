@@ -5,8 +5,8 @@ from PIL import Image, ImageDraw, ImageFilter
 root=sys.argv[1] if len(sys.argv)>1 else 'assets/restaurant'
 FW,FH=320,240
 L=lambda n:Image.open(f'{root}/{n}.webp').convert('RGBA')
-cat={k:L('calico_'+k) for k in ['idle','blink','happy']}
-sushi=L('sushi_salmon').crop((5,20,123,107))
+cat={k:L('calico_'+k).resize((192,192),Image.Resampling.LANCZOS) for k in ['idle','blink','happy']}
+sushi=L('sushi_salmon').resize((128,128),Image.Resampling.LANCZOS).crop((5,20,123,107))
 plate=L('ui_plate').resize((118,40),Image.LANCZOS)
 def scaled(im,s): return im.resize((round(im.width*s),round(im.height*s)),Image.LANCZOS)
 def put(fr,im,cx,cy,rot=0):
