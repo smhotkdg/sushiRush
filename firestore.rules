@@ -64,8 +64,8 @@ service cloud.firestore {
           && intIn(d.score, 1, 10000000)
           && intIn(d.time, 0, 86400)
           && intIn(d.served, 0, 100000)
-          // 손님 1명당 점수는 300점을 넘을 수 없고, 손님은 1초에 1명보다 빨리 받을 수 없다
-          && d.score <= (d.served + 1) * 300
+          // 손님 1명당 평균 점수 상한(VIP 3배 보너스 포함 여유)과, 손님은 1초에 1명보다 빨리 받을 수 없다는 조건
+          && d.score <= (d.served + 2) * 600
           && d.served <= d.time + 5
           && d.updatedAt == request.time;
       }
