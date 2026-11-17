@@ -660,7 +660,7 @@ function startStage(n,endless){
   hideOverlay(); updateHud();
 }
 const RUSH=5;          // 재료를 다 보낸 뒤 빨리 감기 배속
-const COOK_TIME=0.28, SERVE_TIME=0.09;
+const COOK_TIME=0.28, SERVE_TIME=0.17, RUSH_SERVE_TIME=0.10;
 function count(){
   return G.slots.filter(Boolean).length+Number(G.ready!==null)+G.ingredients.length+G.flying.length;
 }
@@ -762,8 +762,10 @@ function update(dt){
     if(!it){
       const pastEntry=(pos-L.entryS+len)%len;
       if(G.ready!==null&&(pastEntry<entryGrace||crossed(pos,L.entryS))){
-        G.slots[i]={type:G.ready,born:G.time};
-        G.ready=null; G.chefServe=SERVE_TIME; sfx.pop();
+        const travelTime=rush?RUSH_SERVE_TIME:SERVE_TIME;
+        G.slots[i]={type:G.ready,born:G.time,travelTime};
+        // 초밥이 레일에 닿기 전에는 다음 조리 동작을 시작하지 않는다.
+        G.ready=null; G.chefServe=travelTime; sfx.pop();
       }
       continue;
     }
@@ -944,7 +946,7 @@ function drawBelt(){
   ctx.translate(L.chef.x,chefBottom);
   ctx.rotate(stroke*0.075+reach*0.10);
   ctx.scale(1+stroke*0.04,1-stroke*0.05);
-  const portrait=pose==='idle'?idleFrame(SPR.chef,0.9):SPR.chef[pose];
+  const portrait=pose==='idle'&&G.ready===null?idleFrame(SPR.chef,0.9):SPR.chef[pose];
   if(!drawArt(portrait||SPR.chef.idle,-chefSize/2,-chefSize,chefSize,chefSize)){
     drawPerson(0,L.chef.y-L.chef.s*0.12-chefBottom,L.chef.s,CHEF,{chef:true,happy:cooking});
   }
@@ -961,7 +963,7 @@ function drawBelt(){
   for(let i=0;i<N;i++){
     const it=G.slots[i]; if(!it) continue;
     const q=pathAt(i*sp+G.offset*p.len);
-    const t=easeOut(clamp((G.time-it.born)/(G.rush?0.10:0.17),0,1));
+    const t=easeOut(clamp((G.time-it.born)/it.travelTime,0,1));
     const x=L.prep.x+(q.x-L.prep.x)*t;
     const y=L.prep.y+(q.y-L.prep.y)*t-Math.sin(t*Math.PI)*tw*0.18;
     sprite(SPR.sushi[it.type],x,y,size*(0.78+t*0.22));
