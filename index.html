@@ -127,6 +127,35 @@
     #art,#splash.go #art,#petals b,.glow,#startHot i,#stage.thud,.show .card{animation:none}
     #doors.close .door,#doors.open .door,#doors.close .welcome{transition:none}
   }
+  /* ---- 계정 / 로그인 / 개발자 ---- */
+  .acct{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:8px 10px;border-radius:12px;background:#fff8e8;border:1px solid #e2bf8c;text-align:left;font-size:14px}
+  .acct .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acct .who small{display:block;font-size:12px;color:#8b6a52}
+  .acct .btn{width:auto;margin:0;padding:6px 12px;font-size:14px;flex:none}
+  .pv{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-size:13px;flex:none;vertical-align:-5px}
+  .pv.kakao{background:#FEE500;color:#191600}.pv.naver{background:#03C75A;color:#fff}.pv.google{background:#fff;border:1px solid #dadce0}
+  .login{display:grid;gap:8px;margin:6px 0 4px}
+  .login button{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:46px;border-radius:12px;font:inherit;font-size:16px;cursor:pointer;border:0;position:relative}
+  .login button:active{transform:translateY(2px)}
+  .login .kakao{background:#FEE500;color:rgba(0,0,0,.85)}
+  .login .naver{background:#03C75A;color:#fff}
+  .login .google{background:#fff;color:#1f1f1f;border:1px solid #747775}
+  .login svg{width:20px;height:20px;flex:none}
+  .login button[disabled]{opacity:.45;cursor:default}
+  .note{font-size:12px;color:#8b6a52;margin:8px 0 0;line-height:1.45;word-break:keep-all}
+  .err{color:#b3261e;font-size:13px;margin:6px 0 0;min-height:1.2em;word-break:keep-all}
+  .field{display:block;width:100%;margin:6px 0 2px;padding:11px 12px;border-radius:11px;border:1.5px solid #d3a16a;background:#fffdf7;
+    font:inherit;font-size:18px;color:#512b24;text-align:center;-webkit-user-select:text;user-select:text;touch-action:auto}
+  .field:focus{outline:2px solid #503f58;outline-offset:1px}
+  .shake{animation:shake .32s}
+  @keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+  .dev{display:grid;gap:8px;margin:8px 0;text-align:left}
+  .dev .tool{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;background:#fff8e8;border:1px solid #e2bf8c}
+  .dev .tool div{flex:1;min-width:0}.dev .tool b{display:block;font-weight:400;font-size:15px}
+  .dev .tool small{display:block;font-size:12px;color:#8b6a52;word-break:break-all}
+  .dev .tool .btn{width:auto;margin:0;padding:7px 12px;font-size:14px;flex:none}
+  .dev .tool .btn.armed{background:#b3261e;border-color:#8c1d18;box-shadow:0 3px 0 #6e1712}
+  .devbadge{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#503f58;color:#fff2d6;font-size:12px;vertical-align:3px}
   .stars{font-size:34px;letter-spacing:4px;margin:2px 0 8px;color:var(--gold);text-shadow:0 2px 0 #e0a100}
 </style>
 </head>
@@ -253,7 +282,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v0.8';
+const VERSION = 'v0.9';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1115,8 +1144,8 @@ function showTitle(){
     body=`<p>기다리던 손님이 떠나면 하트를 하나 잃어요.</p>
       <button class="btn" data-act="endless">무한 모드 시작</button><h3>내 순위 TOP 10</h3>${rankTable()}`;
   }
-  showCard(`<div class="menu-banner"><h2>모드 선택</h2></div>${tabs}${body}${soundRow()}
-    <button class="btn sub small" data-act="reset">${resetArmed?'정말 지울까요? 한 번 더 누르면 초기화':'기록 초기화 (진행·순위)'}</button>
+  authBack='title';
+  showCard(`<div class="menu-banner"><h2>모드 선택</h2></div>${accountRow(true)}${tabs}${body}${soundRow()}
     <button class="btn sub small" data-act="splash">← 타이틀 화면</button>
     <div class="ver">열린 스테이지 ${Math.min(progress.unlocked,MAX_STAGE)} / ${MAX_STAGE}</div>`,'menu');
 }
@@ -1157,13 +1186,230 @@ function startFromSplash(){               // 시작 연출: 버튼 반짝 → �
 }
 function showSettings(){
   uiScreen='settings';
-  showCard(`<h2>설정</h2>${soundRow()}
-    <button class="btn sub small" data-act="reset">${resetArmed?'정말 지울까요? 한 번 더 누르면 초기화':'기록 초기화 (진행·순위)'}</button>
+  authBack='settings';
+  showCard(`<h2>설정</h2>${accountRow()}${soundRow()}
+    <button class="btn sub small" data-act="dev">개발자용</button>
     <button class="btn" data-act="close">닫기</button><div class="ver">${VERSION}</div>`);
 }
 document.getElementById('startHot').addEventListener('click',startFromSplash);
 document.getElementById('gearHot').addEventListener('click',()=>{ if(!splashBusy){ ac(); sfx.ui(); showSettings(); } });
 window.addEventListener('pointerup',()=>{ if(!progress.bgmOff&&!G) ac(); },{once:true});
+
+/* =====================================================================
+   9. 로그인 (카카오 · 네이버 · 구글)
+   - 세 곳 모두 "로그인 페이지로 이동 → 이 게임 주소로 돌아옴" 방식이다.
+   - 여기 있는 값은 공개용 ID 뿐이다. Client Secret 은 절대 이 파일에 넣지 않는다(저장소가 공개).
+   - 각 개발자 콘솔에 등록할 주소는 REDIRECT_URI 이며, 개발자용 화면에서도 확인할 수 있다.
+   ===================================================================== */
+const AUTH_CONFIG={
+  kakaoRestKey:'bb835edeef01a6eea73ad1e37002985a',      // 카카오 REST API 키 (공개 ID)
+  naverClientId:'M3AoI2qMNoIFYP1H3cx3',     // 네이버 Client ID (공개 ID)
+  googleClientId:'730235734503-9mtl06rvvi10ovcuejv1pbr2kfprcteu.apps.googleusercontent.com',   // 구글 OAuth Client ID (공개 ID)
+  kakaoTokenUrl:'',              // 나중에 서버(Firebase Functions 등)를 붙이면 카카오 인가 코드를 여기로 보낸다
+};
+const PROVIDERS={ kakao:{label:'카카오'}, naver:{label:'네이버'}, google:{label:'Google'} };
+// 콘솔에 등록한 주소와 글자 하나까지 같아야 하므로, 배포 주소에서는 고정값을 쓴다.
+const REDIRECT_URI=location.hostname==='smhotkdg.github.io'?'https://smhotkdg.github.io/sushiRush/':location.origin+location.pathname.replace(/index\.html$/,'');
+const authStore={
+  get(){ try{ return JSON.parse(localStorage.getItem('sushi-auth')||'{}'); }catch(e){ return {}; } },
+  set(o){ try{ localStorage.setItem('sushi-auth',JSON.stringify(o)); }catch(e){} },
+};
+let auth=Object.assign({session:null,accounts:{}},authStore.get());   // session:{uid,provider,name,at}, accounts:{uid:{nickname,provider,created}}
+const currentUser=()=>auth.session?Object.assign({},auth.session,auth.accounts[auth.session.uid]||{}):null;
+const randomId=()=>{ const a=new Uint8Array(16); crypto.getRandomValues(a); return Array.from(a,b=>b.toString(16).padStart(2,'0')).join(''); };
+const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let authMsg='', authBack='settings';
+
+function pendingSet(o){ try{ localStorage.setItem('sushi-oauth',JSON.stringify(Object.assign({t:Date.now()},o))); }catch(e){} }
+function pendingTake(){ let o=null; try{ o=JSON.parse(localStorage.getItem('sushi-oauth')||'null'); localStorage.removeItem('sushi-oauth'); }catch(e){} return o&&Date.now()-o.t<10*60*1000?o:null; }
+
+function loadScript(src){ return new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src=src; sc.charset='utf-8'; sc.onload=res; sc.onerror=()=>rej(new Error('script')); document.head.appendChild(sc); }); }
+let naverSdk=null;
+function naverLogin(){                   // 네이버 공식 SDK (implicit 방식: Client ID 만으로 동작)
+  if(!naverSdk) naverSdk=loadScript('https://static.nid.naver.com/js/naveridlogin_js_sdk_2.0.2.js').then(()=>{
+    let box=document.getElementById('naverIdLogin');
+    if(!box){ box=document.createElement('div'); box.id='naverIdLogin'; box.style.display='none'; document.body.appendChild(box); }
+    const nl=new window.naver.LoginWithNaverId({clientId:AUTH_CONFIG.naverClientId,callbackUrl:REDIRECT_URI,isPopup:false,callbackHandle:true,loginButton:{color:'green',type:1,height:40}});
+    nl.init(); return nl;
+  });
+  return naverSdk;
+}
+
+async function startLogin(provider){
+  authMsg='';
+  const state=randomId(), nonce=randomId();
+  pendingSet({provider,state,nonce,back:authBack});
+  if(provider==='kakao'){
+    const u=new URL('https://kauth.kakao.com/oauth/authorize');
+    u.search=new URLSearchParams({client_id:AUTH_CONFIG.kakaoRestKey,redirect_uri:REDIRECT_URI,response_type:'code',state});
+    location.assign(u.href);
+  }else if(provider==='google'){
+    const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    u.search=new URLSearchParams({client_id:AUTH_CONFIG.googleClientId,redirect_uri:REDIRECT_URI,response_type:'id_token',scope:'openid profile',nonce,state,prompt:'select_account'});
+    location.assign(u.href);
+  }else if(provider==='naver'){
+    try{
+      await naverLogin();
+      const a=document.getElementById('naverIdLogin_loginButton')||document.querySelector('#naverIdLogin a');
+      if(!a) throw new Error('button');
+      a.click();
+    }catch(e){ pendingTake(); authMsg='네이버 로그인을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'; showLogin(); }
+  }
+}
+
+function decodeJwt(t){
+  const p=t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+  return JSON.parse(decodeURIComponent(atob(p).split('').map(c=>'%'+c.charCodeAt(0).toString(16).padStart(2,'0')).join('')));
+}
+async function kakaoIdentity(code){
+  if(AUTH_CONFIG.kakaoTokenUrl){           // 서버가 붙으면 비밀키 교환은 서버가 한다
+    const r=await fetch(AUTH_CONFIG.kakaoTokenUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,redirectUri:REDIRECT_URI})});
+    if(!r.ok) throw new Error('kakao-server'); return r.json();
+  }
+  const r=await fetch('https://kauth.kakao.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=utf-8'},
+    body:new URLSearchParams({grant_type:'authorization_code',client_id:AUTH_CONFIG.kakaoRestKey,redirect_uri:REDIRECT_URI,code})});
+  const tok=await r.json().catch(()=>({}));
+  if(!r.ok||!tok.access_token){ const e=new Error(tok.error_code||tok.error||'kakao-token'); e.kakao=tok.error_code; throw e; }
+  const pr=await fetch('https://kapi.kakao.com/v2/user/me',{headers:{Authorization:'Bearer '+tok.access_token}});
+  const me=await pr.json(); if(!pr.ok||!me.id) throw new Error('kakao-profile');
+  return {id:String(me.id),name:me.kakao_account?.profile?.nickname||me.properties?.nickname||''};
+}
+function naverIdentity(){
+  return naverLogin().then(nl=>new Promise((res,rej)=>{
+    const t=setTimeout(()=>rej(new Error('naver-timeout')),10000);
+    nl.getLoginStatus(ok=>{ clearTimeout(t);
+      if(!ok||!nl.user||!nl.user.getId()) return rej(new Error('naver-profile'));
+      res({id:String(nl.user.getId()),name:nl.user.getNickName?.()||nl.user.getName?.()||''}); });
+  }));
+}
+function cleanUrl(){ history.replaceState(null,'',REDIRECT_URI); }
+
+// 로그인 페이지에서 돌아왔을 때 한 번 처리한다. 처리했으면 true.
+async function handleAuthCallback(){
+  const q=new URLSearchParams(location.search), h=new URLSearchParams(location.hash.slice(1));
+  const isKakao=q.has('code')||(q.has('error')&&q.has('state')), isGoogle=h.has('id_token')||(h.has('error')&&h.has('state')&&!h.has('access_token')), isNaver=h.has('access_token');
+  if(!isKakao&&!isGoogle&&!isNaver) return false;
+  const pend=pendingTake(); authBack=pend?.back||'settings';
+  const fail=msg=>{ cleanUrl(); authMsg=msg; return 'fail'; };
+  try{
+    let provider, ident;
+    if(isKakao){
+      provider='kakao';
+      if(!pend||pend.provider!=='kakao'||q.get('state')!==pend.state) return fail('로그인 요청이 만료됐어요. 다시 시도해 주세요.');
+      if(q.get('error')) return fail('카카오 로그인을 취소했어요.');
+      ident=await kakaoIdentity(q.get('code'));
+    }else if(isGoogle){
+      provider='google';
+      if(!pend||pend.provider!=='google'||h.get('state')!==pend.state) return fail('로그인 요청이 만료됐어요. 다시 시도해 주세요.');
+      if(h.get('error')) return fail('Google 로그인을 취소했어요.');
+      const c=decodeJwt(h.get('id_token'));
+      if(c.aud!==AUTH_CONFIG.googleClientId||c.nonce!==pend.nonce||!/accounts\.google\.com$/.test(c.iss)||c.exp*1000<Date.now()) return fail('Google 로그인 정보를 확인하지 못했어요.');
+      ident={id:String(c.sub),name:c.name||''};
+    }else{
+      provider='naver';
+      ident=await naverIdentity();
+    }
+    cleanUrl();
+    const uid=provider+':'+ident.id;
+    auth.session={uid,provider,name:ident.name,at:Date.now()};
+    auth.accounts[uid]=Object.assign({provider,created:Date.now()},auth.accounts[uid]||{});
+    authStore.set(auth);
+    return 'ok';
+  }catch(e){
+    if(e.kakao==='KOE010') return fail('카카오 앱에 Client Secret 이 켜져 있어 서버 없이 로그인할 수 없어요. (개발자용 화면 참고)');
+    if(e.kakao==='KOE006'||e.kakao==='KOE303') return fail('카카오 개발자 콘솔에 이 게임 주소가 Redirect URI 로 등록되지 않았어요.');
+    return fail(PROVIDERS[isKakao?'kakao':isGoogle?'google':'naver'].label+' 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.');
+  }
+}
+function logout(){
+  auth.session=null; authStore.set(auth);
+  try{ naverSdk&&naverSdk.then(nl=>nl.logout&&nl.logout()).catch(()=>{}); }catch(e){}
+}
+
+const ICONS={
+  kakao:'<svg viewBox="0 0 24 24"><path fill="#191600" d="M12 3.5C6.75 3.5 2.5 6.86 2.5 11c0 2.65 1.74 4.98 4.37 6.3l-.9 3.3c-.08.3.26.54.52.37l3.93-2.6c.51.06 1.03.1 1.58.1 5.25 0 9.5-3.36 9.5-7.5S17.25 3.5 12 3.5z"/></svg>',
+  naver:'<svg viewBox="0 0 24 24"><path fill="#fff" d="M14.6 12.4 9.2 4.6H4.6v14.8h4.8v-7.8l5.4 7.8h4.6V4.6h-4.8z"/></svg>',
+  google:'<svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>',
+};
+const pvBadge=p=>`<span class="pv ${p}">${p==='google'?ICONS.google.replace('<svg','<svg width="14" height="14"'):p==='kakao'?'K':'N'}</span>`;
+function accountRow(compact){
+  const u=currentUser();
+  if(!u) return `<div class="acct"><div class="who">로그인하지 않았어요<small>로그인하면 무한 모드 랭킹에 참여할 수 있어요</small></div><button class="btn" data-act="login">로그인</button></div>`;
+  return `<div class="acct">${pvBadge(u.provider)}<div class="who">${esc(u.nickname||'닉네임 미설정')}<small>${PROVIDERS[u.provider].label} 계정${compact?'':' 로그인 중'}</small></div><button class="btn sub" data-act="logout">로그아웃</button></div>`;
+}
+function showLogin(){
+  uiScreen='login';
+  const b=(p,t)=>`<button class="${p}" data-act="login-${p}">${ICONS[p]}<span>${t}</span></button>`;
+  showCard(`<h2>로그인</h2><p>로그인하면 기록이 계정에 연결되고, 무한 모드 랭킹에 참여할 수 있어요.</p>
+    <div class="login">${b('kakao','카카오 로그인')}${b('naver','네이버 로그인')}${b('google','Google 계정으로 로그인')}</div>
+    <div class="err">${esc(authMsg)}</div>
+    <button class="btn sub" data-act="auth-back">돌아가기</button>`,authBack==='title'?'menu':'dialog');
+}
+const NICK_RE=/^[가-힣a-zA-Z0-9_]{2,10}$/;
+function showNickname(msg=''){
+  uiScreen='nickname';
+  const u=currentUser();
+  showCard(`<h2>닉네임 정하기</h2><p>랭킹에 보일 이름이에요. <b>한 번 정하면 바꿀 수 없어요.</b><br>한글·영문·숫자·밑줄(_) 2~10자</p>
+    <input class="field" id="nickInput" maxlength="10" autocomplete="off" spellcheck="false" placeholder="닉네임" value="${esc((u&&u.name||'').replace(/[^가-힣a-zA-Z0-9_]/g,'').slice(0,10))}">
+    <div class="err" id="nickErr">${esc(msg)}</div>
+    <button class="btn" data-act="nick-save">이 이름으로 정하기</button>
+    <button class="btn sub small" data-act="logout">다른 계정으로 로그인 (로그아웃)</button>`);
+  setTimeout(()=>{ const i=document.getElementById('nickInput'); i&&i.focus(); },60);
+}
+function saveNickname(){
+  const i=document.getElementById('nickInput'), v=(i&&i.value||'').trim();
+  if(!NICK_RE.test(v)){ const er=document.getElementById('nickErr'); er.textContent='한글·영문·숫자·밑줄(_)로 2~10자를 입력해 주세요.'; i.classList.remove('shake'); void i.offsetWidth; i.classList.add('shake'); return; }
+  const u=auth.session; if(!u) return;
+  auth.accounts[u.uid]=Object.assign(auth.accounts[u.uid]||{},{nickname:v,nickAt:Date.now()}); authStore.set(auth);
+  afterAuth();
+}
+function afterAuth(){                    // 로그인/닉네임 설정이 끝난 뒤 원래 화면으로 돌아간다
+  authMsg='';
+  if(authBack==='title'){ uiScreen='title'; showTitle(); } else showSettings();
+}
+
+/* =====================================================================
+   10. 개발자용 화면 — DEV_TOOLS 에 항목을 추가하면 화면에 자동으로 나온다.
+       danger:true 면 두 번 눌러야 실행된다. 비밀번호는 DEV_PASSWORD.
+   ===================================================================== */
+const DEV_PASSWORD='2222';
+let devUnlocked=false, devArmed='';
+const DEV_TOOLS=[
+  {id:'reset-progress',label:'게임 기록 초기화',desc:'스테이지 진행, 최고 기록, 무한 모드 순위',danger:true,
+   run(){ progress={unlocked:1,cleared:0,best:{},rank:[],tab:progress.tab,sfxOff:progress.sfxOff,bgmOff:progress.bgmOff}; save.set(progress); titlePage=0; return '게임 기록을 지웠어요.'; }},
+  {id:'reset-auth',label:'로그인 기록 초기화',desc:'현재 로그인과 이 브라우저에 저장된 모든 계정·닉네임',danger:true,
+   run(){ logout(); auth={session:null,accounts:{}}; authStore.set(auth); try{ localStorage.removeItem('sushi-oauth'); }catch(e){} return '로그인 기록을 지웠어요.'; }},
+  {id:'reset-nick',label:'내 닉네임 다시 정하기',desc:'현재 계정의 닉네임을 지우고 설정 화면을 다시 띄워요',danger:true,
+   run(){ const u=auth.session; if(!u) return '로그인한 계정이 없어요.'; delete auth.accounts[u.uid].nickname; authStore.set(auth); authBack='settings'; showNickname(); return null; }},
+  {id:'unlock-all',label:'전체 스테이지 열기',desc:`1~${MAX_STAGE} 스테이지를 모두 열어요`,
+   run(){ progress.unlocked=MAX_STAGE; save.set(progress); return `스테이지 ${MAX_STAGE}개를 모두 열었어요.`; }},
+  {id:'auth-info',label:'로그인 연동 정보',desc:()=>`등록할 주소: ${REDIRECT_URI}`,
+   run(){ return `카카오 Redirect URI · 네이버 Callback URL · Google 승인된 리디렉션 URI 에 ${REDIRECT_URI} 를 등록하세요.`+(AUTH_CONFIG.kakaoTokenUrl?'':' 카카오는 Client Secret 이 켜져 있으면 서버 연결 전까지 로그인되지 않아요.'); }},
+];
+function showDevLock(msg=''){
+  uiScreen='devlock';
+  showCard(`<h2>개발자용</h2><p>비밀번호를 입력하세요.</p>
+    <input class="field" id="devPw" type="password" inputmode="numeric" autocomplete="off" maxlength="12">
+    <div class="err" id="devErr">${esc(msg)}</div>
+    <button class="btn" data-act="dev-enter">확인</button><button class="btn sub" data-act="auth-back">돌아가기</button>`);
+  setTimeout(()=>{ const i=document.getElementById('devPw'); i&&i.focus(); },60);
+}
+function showDev(msg=''){
+  uiScreen='dev';
+  const u=currentUser();
+  const rows=DEV_TOOLS.map(t=>`<div class="tool"><div><b>${esc(t.label)}</b><small>${esc(typeof t.desc==='function'?t.desc():t.desc)}</small></div>
+    <button class="btn ${t.danger?'':'sub'} ${devArmed===t.id?'armed':''}" data-act="dev-tool" data-tool="${t.id}">${devArmed===t.id?'한 번 더':'실행'}</button></div>`).join('');
+  showCard(`<h2>개발자용<span class="devbadge">${VERSION}</span></h2>
+    <p>로그인: ${u?`${esc(u.nickname||'(닉네임 없음)')} · ${PROVIDERS[u.provider].label}`:'없음'} · 저장된 계정 ${Object.keys(auth.accounts).length}개<br>열린 스테이지 ${Math.min(progress.unlocked,MAX_STAGE)} · 무한 모드 기록 ${(progress.rank||[]).length}개</p>
+    <div class="dev">${rows}</div><div class="err">${esc(msg)}</div>
+    <button class="btn sub" data-act="auth-back">설정으로</button>`);
+}
+function runDevTool(id){
+  const t=DEV_TOOLS.find(x=>x.id===id); if(!t) return;
+  if(t.danger&&devArmed!==id){ devArmed=id; return showDev(); }
+  devArmed='';
+  const r=t.run(); if(r!==null) showDev(r);
+}
 function showPause(){
   showCard(`<div class="pause-banner"><div><h2>잠시 멈춤</h2><p>${G.endless?`무한 모드 · ${G.score.toLocaleString()}점 · ${fmtTime(G.time)}`:`STAGE ${G.stage} · ${G.delivered}/${G.total}`}</p></div><img src="assets/restaurant/gyuri_serve.webp" alt=""></div>
     <button class="btn" data-act="resume">계속하기</button><button class="btn sub" data-act="retry">다시 시작</button>${soundRow()}
@@ -1205,11 +1451,28 @@ card.addEventListener('click',e=>{
     else { resetArmed=false; progress={unlocked:1,cleared:0,best:{},rank:[],tab:progress.tab,sfxOff:progress.sfxOff,bgmOff:progress.bgmOff}; save.set(progress); titlePage=0; refresh(); }
   }
   else if(a==='close'){ uiScreen='splash'; hideOverlay(); }
+  else if(a==='login'){ authMsg=''; showLogin(); }
+  else if(a&&a.startsWith('login-')) startLogin(a.slice(6));
+  else if(a==='logout'){ logout(); afterAuth(); }
+  else if(a==='nick-save') saveNickname();
+  else if(a==='auth-back'){ devArmed=''; afterAuth(); }
+  else if(a==='dev'){ devUnlocked?showDev():showDevLock(); }
+  else if(a==='dev-enter'){
+    const i=document.getElementById('devPw');
+    if(i&&i.value===DEV_PASSWORD){ devUnlocked=true; showDev(); }
+    else { showDevLock('비밀번호가 맞지 않아요.'); const j=document.getElementById('devPw'); j.classList.add('shake'); }
+  }
+  else if(a==='dev-tool') runDevTool(b.dataset.tool);
   else if(a==='splash') showSplash();
   else if(a==='prev'){ titlePage--; showTitle(); }
   else if(a==='nextpage'){ titlePage++; showTitle(); }
   else if(a==='sfx'){ progress.sfxOff=!progress.sfxOff; save.set(progress); refresh(); }
   else if(a==='bgm'){ progress.bgmOff=!progress.bgmOff; save.set(progress); refresh(); }
+});
+card.addEventListener('keydown',e=>{            // 입력칸에서 Enter = 확인
+  if(e.key!=='Enter') return; e.stopPropagation();
+  if(e.target.id==='nickInput') saveNickname();
+  if(e.target.id==='devPw') card.querySelector('[data-act="dev-enter"]').click();
 });
 function pause(){ if(G&&G.state==='play'){ G.state='pause'; showPause(); } }
 document.getElementById('pauseBtn').addEventListener('click',pause);
@@ -1221,7 +1484,7 @@ cv.addEventListener('pointerdown',e=>{
   const col=L.lanes.findIndex(lane=>x>=lane.left&&x<lane.right);
   if(col>=0) tapColumn(col);
 });
-window.addEventListener('keydown',e=>{ if(e.key>='1'&&e.key<='5') tapColumn(+e.key-1); if(e.key==='Escape') pause(); });
+window.addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT') return; if(e.key>='1'&&e.key<='5') tapColumn(+e.key-1); if(e.key==='Escape') pause(); });
 window.addEventListener('resize',layout);
 if(window.ResizeObserver) new ResizeObserver(layout).observe(stageEl);
 
@@ -1232,10 +1495,14 @@ function frame(t){
   draw();
   requestAnimationFrame(frame);
 }
-window.__game={ get G(){return G;}, END, buildVerified, buildStage, solvable, tapColumn, startStage, count, update };   // 디버그/테스트용
+window.__game={ get G(){return G;}, get auth(){return auth;}, DEV_TOOLS, REDIRECT_URI, END, buildVerified, buildStage, solvable, tapColumn, startStage, count, update };   // 디버그/테스트용
 layout();
 const fontReady=(document.fonts&&document.fonts.load)?Promise.race([document.fonts.load('20px Jua').catch(()=>{}),new Promise(r=>setTimeout(r,1500))]):Promise.resolve();
-Promise.all([loadAssets(),fontReady]).then(()=>{ showSplash(); requestAnimationFrame(frame); });
+Promise.all([loadAssets(),fontReady,handleAuthCallback()]).then(([,,cb])=>{
+  showSplash(); requestAnimationFrame(frame);
+  if(cb==='ok'){ const u=currentUser(); if(!u.nickname) showNickname(); else afterAuth(); }   // 첫 로그인이면 닉네임부터
+  else if(cb==='fail') showLogin();
+});
 </script>
 </body>
 </html>
