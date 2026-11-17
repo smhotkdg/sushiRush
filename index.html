@@ -292,7 +292,7 @@
    ===================================================================== */
 const ASSET_ROOT = 'assets/restaurant/';
 const ASSET_URLS = {};
-const CHEF_STATES = ['idle','blink','cook','serve'];
+const CHEF_STATES = ['idle','blink','cook','serve','skill'];
 const GUEST_STATES = ['idle','blink','angry','happy'];
 const GUESTS = ['calico','rabbit','shiba','tuxedo'];
 const SPECIAL_GUESTS = ['vip','rush'];          // 특별 손님 그림 (기존 손님 + 소품)
@@ -379,7 +379,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.3.5';
+const VERSION = 'v1.4';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -410,7 +410,10 @@ function lookFor(kind){ const l=randomLook(); if(kind==='vip'||kind==='rush') l.
 const SPECIAL={
   vip:{ name:'VIP 미식가', color:'#d4a017', intro:'다 채우면 점수 3배 + 신바람!', fever:8 },
   rush:{ name:'급한 직장인', color:'#3e5496', intro:'빨리 대접하면 신바람!', fever:4 },
+  group:{ name:'단체 손님', color:'#2f9c86', intro:'둘 다 채우면 큰 보너스!', fever:5 },
 };
+const SPECIAL_TAG={vip:'VIP',rush:'급해요!',group:'단체'};
+const EVENT_GAP=7;             // 특별 손님은 최소 이 손님 수만큼 떨어져서 나온다(너무 자주 나오면 덜 반갑다)
 // 한 손님이 주문하는 초밥 종류 수의 확률 (진행도 p: 스테이지 번호 또는 무한 모드에서 응대한 손님 수)
 function kindsChance(p,endless){
   const a=endless?p:p*0.75;                     // 무한 모드는 조금 더 빨리 섞인다
@@ -430,33 +433,48 @@ function makeOrder(types,cfg,progressN,endless,kind){
   for(let left=total-k*2;left>0;left--) items[rnd(0,k-1)].need++;
   return items;
 }
-const orderNeed=c=>c.items.reduce((a,it)=>a+it.need,0);
+const orderNeed=c=>(c.group?c.members.flatMap(m=>m.items):c.items).reduce((a,it)=>a+it.need,0);
 const wantsType=(s,type)=>s.items.find(it=>it.type===type&&it.need>0);
-function specialKind(p,endless,i,n){
-  // 스테이지: 6부터 급한 직장인, 10부터 VIP. 처음 나오는 스테이지에는 반드시 한 명 나온다.
+function specialKind(p,endless,i,n,lastEvent=-99){
+  // 스테이지: 6부터 급한 직장인, 10부터 VIP, 20부터 단체 손님. 처음 나오는 스테이지에는 반드시 한 명 나온다.
   if(!endless){
     if(n===6&&i===2) return 'rush';
     if(n===10&&i===3) return 'vip';
-    if(n>=10&&Math.random()<0.07) return 'vip';
-    if(n>=6&&Math.random()<0.12) return 'rush';
+    if(n===20&&i===2) return 'group';
+    if(i-lastEvent<EVENT_GAP) return 'normal';
+    const r=Math.random();
+    if(n>=20&&r<0.035) return 'group';
+    if(n>=10&&r<0.065) return 'vip';
+    if(n>=6&&r<0.11) return 'rush';
     return 'normal';
   }
-  if(p>=18&&Math.random()<0.06) return 'vip';
-  if(p>=6&&Math.random()<0.12) return 'rush';
+  if(i-lastEvent<EVENT_GAP) return 'normal';
+  const r=Math.random();
+  if(p>=12&&r<0.035) return 'group';
+  if(p>=18&&r<0.06) return 'vip';
+  if(p>=6&&r<0.10) return 'rush';
   return 'normal';
 }
+// 단체 손님은 두 명이 각자 조금 작은 주문을 한다.
+function makeGroup(types,cfg,progressN,endless){
+  const c2={...cfg,orderMin:Math.max(2,cfg.orderMin-1),orderMax:Math.max(cfg.orderMin,cfg.orderMax-2)};
+  return [0,1].map(()=>({items:makeOrder(types,c2,progressN,endless,'normal'),look:randomLook()}));
+}
+const entryItems=c=>c.group?c.members.flatMap(m=>m.items):c.items;
 function buildStage(n,mixScale=1){
   const cfg=stageConfig(n); cfg.mix*=mixScale; const types=TYPE_ORDER.slice(0,cfg.types);
-  const queue=[]; let total=0, last=null;
+  const queue=[]; let total=0, last=null, lastEvent=-99;
   for(let i=0;i<cfg.customers;i++){
-    const kind=specialKind(n,false,i,n);
+    const kind=specialKind(n,false,i,n,lastEvent);
+    if(kind!=='normal') lastEvent=i;
+    if(kind==='group'){ const members=makeGroup(types,cfg,n,false); const c={group:true,kind,members}; queue.push(c); total+=orderNeed(c); last=null; continue; }
     let items; do{ items=makeOrder(types,cfg,n,false,kind); }while(items.length===1&&items[0].type===last&&types.length>1);
     last=items[0].type;
     queue.push({items,kind,look:lookFor(kind)}); total+=orderNeed({items});
   }
   // 손님 주문량과 정확히 같은 양의 재료를, 등장 순서와 비슷하게 섞어 5줄에 나눠 쌓는다
   const runs=[];
-  queue.forEach((c,i)=>{ for(const it of c.items){ let left=it.need; while(left>0){ const k=Math.min(left,rnd(1,3)); runs.push({type:it.type,k,key:i+Math.random()*cfg.mix}); left-=k; } }});
+  queue.forEach((c,i)=>{ for(const it of entryItems(c)){ let left=it.need; while(left>0){ const k=Math.min(left,rnd(1,3)); runs.push({type:it.type,k,key:i+Math.random()*cfg.mix}); left-=k; } }});
   runs.sort((a,b)=>a.key-b.key);
   const cols=Array.from({length:COLS},()=>[]);
   for(const r of runs){
@@ -473,7 +491,9 @@ function buildStage(n,mixScale=1){
 function solvable(st){
   const cfg=st.cfg, N=Math.max(cfg.capacity,MIN_RAIL_SLOTS), limit=cfg.capacity-2;
   const tick=cfg.loop/N, len=L.path.len;
-  const cols=st.cols.map(c=>c.slice()), queue=st.queue.map(c=>({items:c.items.map(it=>({...it})),need:orderNeed(c)}));
+  const cols=st.cols.map(c=>c.slice());
+  const seatOf=c=>({items:c.items.map(it=>({...it})),need:orderNeed(c)});
+  const queue=st.queue.map(c=>c.group?{group:true,members:c.members.map(seatOf)}:seatOf(c));
   const seatIdx=L.seatS.map(v=>Math.floor(v/len*N)%N), entryIdx=Math.floor(L.entryS/len*N)%N;
   const arrive=Math.ceil((cfg.spawnGap+LEAVE_TIME+ARRIVE_TIME)/tick)+1, taps=Math.max(1,Math.floor(tick*3));
   const slots=Array(N).fill(null), seats=[null,null,null,null], timer=FIRST_ARRIVALS.map(t=>Math.ceil((t+ARRIVE_TIME)/tick)+1);
@@ -484,9 +504,20 @@ function solvable(st){
     if(!slots[entryIdx]&&pending.length) slots[entryIdx]=pending.shift();
     for(let k=0;k<4;k++){
       const s=seats[k];
-      if(!s){ if(queue.length&&--timer[k]<=0) seats[k]=queue.shift(); continue; }
+      if(!s){
+        if(!queue.length||--timer[k]>0) continue;
+        if(queue[0].group){                                      // 단체 손님은 짝 자리(0-1, 2-3)가 함께 비어야 앉는다
+          const j=k^1; if(seats[j]) continue;
+          const g=queue.shift(), grp={members:g.members}; g.members.forEach((m,x)=>{ m.grp=grp; seats[x?j:k]=m; });
+        } else seats[k]=queue.shift();
+        continue;
+      }
       const it=slots[seatIdx[k]]&&wantsType(s,slots[seatIdx[k]]);
-      if(it){ it.need--; slots[seatIdx[k]]=null; delivered++; idle=0; if(--s.need===0){ seats[k]=null; timer[k]=arrive; } }
+      if(it){ it.need--; slots[seatIdx[k]]=null; delivered++; idle=0;
+        if(--s.need===0){
+          if(!s.grp){ seats[k]=null; timer[k]=arrive; }
+          else if(s.grp.members.every(m=>m.need===0)) for(let x=0;x<4;x++) if(seats[x]&&seats[x].grp===s.grp){ seats[x]=null; timer[x]=arrive; }
+        } }
     }
     for(let a=0;a<taps;a++){
       const want={}, have={}; let cnt=pending.length;
@@ -519,16 +550,33 @@ const ENDLESS_ROWS=12;                  // 무한 모드에서 각 줄에 항상
 // 재료는 손님 순서(key)대로 줄 아래에 이어 붙으므로, 각 줄의 위쪽에는 항상 "곧 올 손님"의 재료가 온다.
 // 섞임 폭(mix)이 3명 이내라서, 필요한 재료 위에 있는 것은 지금 앉아 있거나 바로 다음 손님의 재료뿐이다.
 function genCustomer(){
-  const i=G.gen++, cfg=endlessCfg(i), types=TYPE_ORDER.slice(0,cfg.types), kind=specialKind(i,true);
-  let items; do{ items=makeOrder(types,cfg,i,true,kind); }while(items.length===1&&items[0].type===G.lastType&&types.length>1);
-  G.lastType=items[0].type;
-  G.queue.push({items,kind,look:lookFor(kind)});
-  for(const it of items){ let left=it.need; while(left>0){ const k=Math.min(left,rnd(1,3)); G.pool.push({type:it.type,k,key:i+Math.random()*cfg.mix}); left-=k; } }
+  const i=G.gen++, cfg=endlessCfg(i), types=TYPE_ORDER.slice(0,cfg.types), kind=specialKind(i,true,i,0,G.lastEvent??-99);
+  if(kind!=='normal') G.lastEvent=i;
+  let entry;
+  if(kind==='group'){ entry={group:true,kind,members:makeGroup(types,cfg,i,true)}; G.lastType=null; }
+  else{
+    let items; do{ items=makeOrder(types,cfg,i,true,kind); }while(items.length===1&&items[0].type===G.lastType&&types.length>1);
+    G.lastType=items[0].type; entry={items,kind,look:lookFor(kind)};
+  }
+  G.queue.push(entry);
+  for(const it of entryItems(entry)){ let left=it.need; while(left>0){ const k=Math.min(left,rnd(1,3)); G.pool.push({type:it.type,k,key:i+Math.random()*cfg.mix}); left-=k; } }
   G.pool.sort((a,b)=>a.key-b.key);
   while(G.pool.length&&G.pool[0].key<G.gen){             // 이후 손님의 key 는 모두 G.gen 이상이므로 순서가 확정된 것만 내보낸다
     const r=G.pool.shift(), idx=[0,1,2,3,4].sort((a,b)=>G.cols[a].length-G.cols[b].length), c=idx[Math.random()<0.7?0:1];
-    for(let j=0;j<r.k;j++) G.cols[c].push(r.type);
+    for(let j=0;j<r.k;j++) colPut(c,r.type,j===0&&goldRoll());
   }
+}
+/* ---- 황금 접시 ----
+   각 줄(G.cols[c])과 같은 길이의 표시 배열 G.gold[c] 를 함께 옮긴다. 황금 재료로 만든 초밥을
+   원하는 손님에게 주면 보너스 + 신바람. 재료 자체는 보통 재료와 똑같이 계산되므로 클리어 가능성은 그대로다. */
+function colTake(c,j=0){ const type=G.cols[c].splice(j,1)[0], gold=!!G.gold[c].splice(j,1)[0]; return {type,gold}; }
+function colPut(c,type,gold=false,top=false){ if(top){ G.cols[c].unshift(type); G.gold[c].unshift(gold); } else { G.cols[c].push(type); G.gold[c].push(gold); } }
+const goldCount=()=>G.gold.reduce((a,g)=>a+g.filter(Boolean).length,0)+G.slots.filter(x=>x&&x.gold).length;
+function goldRoll(){ return G.endless&&G.gen>4&&goldCount()<1&&Math.random()<0.03; }
+function placeStageGold(n){                       // 스테이지: 4부터 1개, 30부터 2개 (위쪽 두 칸은 피한다)
+  const k=n<4?0:n<30?1:2, spots=[];
+  G.cols.forEach((col,c)=>col.forEach((_,j)=>{ if(j>=2) spots.push([c,j]); }));
+  for(let t=0;t<k&&spots.length;t++){ const [c,j]=spots.splice(rnd(0,spots.length-1),1)[0]; G.gold[c][j]=true; }
 }
 function refill(){                       // 가장 짧은 줄이 ENDLESS_ROWS 개가 될 때까지 계속 채운다
   let guard=0;
@@ -551,7 +599,7 @@ function unblock(){
     for(let c=0;c<COLS;c++){ const d=G.cols[c].findIndex(x=>missing.includes(x)); if(d>=0&&d<bd){ bd=d; best=c; } }
     const limit=s.pat/s.patMax<0.5?1:3;
     if(best<0||(bd<=limit&&bd+1<=free)) continue;           // 충분히 가까이 있다
-    const col=G.cols[best]; col.unshift(col.splice(bd,1)[0]); G.rescues++;
+    const x=colTake(best,bd); colPut(best,x.type,x.gold,true); G.rescues++;
     const lane=L.lanes[best]; ring(lane.x,L.rowTop,lane.w*0.7,'#ffc83d'); burst(lane.x,L.rowTop,6,{shape:'star',colors:['#ffc83d','#fff'],speed:120,size:7,life:0.5});
     return;                                                  // 한 번에 하나씩
   }
@@ -733,6 +781,7 @@ function layout(){
   const boardW=W*0.92;
   L.boardH=Math.round(Math.min(H*0.36,boardW*258/381+20)); L.boardY=H-L.boardH;
   L.barH=clamp(H*0.04,24,32); L.barY=L.boardY-L.barH-8;
+  { const r=clamp(L.barH*0.95,21,29); L.skill={x:W*0.94-r,y:L.barY+L.barH/2,r}; }     // 필살기 버튼(게이지 오른쪽)
   L.playTop=hud; L.playBot=L.barY-8;
   const playH=L.playBot-L.playTop;
   L.cs=Math.min(W*0.21,playH*0.2);                       // 손님 크기
@@ -868,7 +917,9 @@ function startStage(n,endless){
       seats:[null,null,null,null], seatTimer:FIRST_ARRIVALS.slice(),
       slots:Array(Math.max(st.cfg.capacity,MIN_RAIL_SLOTS)).fill(null), offset:0, // offset: 벨트 회전량(0~1)
       ingredients:[], cookTime:null, ready:null, flying:[], fx:[], parts:[], state:'play', time:0, endT:0, chefServe:0,
-      shake:0, combo:0, lastServe:-9, confT:0, tapped:false, fever:0, stray:null, strayT:null, banner:null, flash:0 };
+      shake:0, combo:0, lastServe:-9, confT:0, tapped:false, fever:0, stray:null, strayT:null, banner:null, flash:0,
+      gold:st.cols.map(c=>c.map(()=>false)), ingGold:[], readyGold:false, skill:0, skillT:0, skillPull:0, skillOn:endless||n>=3 };
+  if(!endless) placeStageGold(n);
   if(endless){ Object.assign(G,{endless:true,lives:3,score:0,served:0,gen:0,lastType:null,hudKey:'',pool:[],stallT:0,rescues:0}); refill(); }
   document.getElementById('stageLabel').textContent='STAGE '+n;
   const hud=document.getElementById('hud');
@@ -893,8 +944,8 @@ function updateHud(){
 function tapColumn(c){
   if(!G||G.state!=='play') return;
   const col=G.cols[c]; if(!col.length) return;
-  const type=col.shift(), lane=L.lanes[c], x=lane.x, y=L.rowTop+G.colShift[c]*L.rowH;
-  G.flying.push({type,x0:x,y0:y,t:0,dur:0.34});
+  const {type,gold}=colTake(c,0), lane=L.lanes[c], x=lane.x, y=L.rowTop+G.colShift[c]*L.rowH;
+  G.flying.push({type,gold,x0:x,y0:y,t:0,dur:0.34});
   G.colShift[c]=1; G.colFlash[c]=1; G.tapped=true;
   ring(x,y,lane.w*0.55,'#ffc83d'); burst(x,y,4,{shape:'star',colors:['#ffc83d','#fff'],speed:110,size:6,life:0.4});
   sfx.tap();
@@ -903,14 +954,97 @@ function tapColumn(c){
   }
 }
 
-function announceSpecial(kind){
+function announceSpecial(kind,s){
   const sp=SPECIAL[kind], seen=progress.seenSpecial||(progress.seenSpecial={});
-  G.banner={title:sp.name+' 등장!',sub:sp.intro,color:sp.color,icon:kind,big:true,tag:kind==='vip'?'VIP':'급해요!',dur:seen[kind]?3.4:4.5};
+  G.banner={title:sp.name+' 등장!',sub:sp.intro,color:sp.color,icon:kind,big:true,tag:SPECIAL_TAG[kind],dur:seen[kind]?3.4:4.5,
+            img:kind==='group'?SPR.guests[s?.look?.guest]?.happy:null};
   if(!seen[kind]){ seen[kind]=1; save.set(progress); }
   G.flash=0.22;
   const cy=L.inner.y+L.inner.h*0.5;
   burst(W/2,cy,22,{shape:'star',colors:kind==='vip'?['#ffe27a','#fff6c8','#f5b31f']:['#a9c2ff','#ffffff','#6f8ae0'],speed:260,size:9,life:0.9,g:120});
   const c=ac(); if(c&&!progress.sfxOff) [880,1175,1568].forEach((f,i)=>tone(f,.16,'triangle',.08,0,c.currentTime+i*.07));
+}
+// 단체 손님: 둘 다 다 먹으면 함께 떠나며 큰 보너스(무한: 얻은 점수만큼 한 번 더 + 150) + 신바람
+function completeGroup(grp){
+  const sp=SPECIAL.group; sfx.done();
+  for(const m of grp.members){ m.leaving=true; m.waitDone=false; if(G.endless){ G.score+=50; G.served++; } }
+  const a=L.seat[grp.seats[0]], b=L.seat[grp.seats[1]], mx=(a.x+b.x)/2, my=a.top?a.y+L.cs*1.15:a.y-L.cs*1.0;
+  let label='단체 대접 성공!';
+  if(G.endless){ const bonus=grp.earned+150; G.score+=bonus; label=`단체 보너스 +${bonus}`; }
+  G.fever=Math.max(G.fever,sp.fever); chargeSkill(0.08); updateHud();
+  floatText(mx,my,label,sp.color,22,'bonus');
+  for(const q of [a,b]) burst(q.x,q.y,14,{shape:'heart',colors:['#ff7a8a','#7fd8c4','#ffc83d'],speed:180,size:8,life:0.9,up:100});
+  burst(mx,a.y,18,{shape:'star',colors:['#ffd84a','#fff3c0',sp.color],speed:220,size:9,life:0.9,up:120});
+  G.banner={title:'신바람 '+sp.fever+'초!',sub:'벨트와 조리가 2배 빨라져요',color:'#e0613a',icon:'fever',dur:2.8};
+}
+// 황금 초밥을 원하는 손님에게 주면: 신바람 + (무한) 보너스 점수 + 필살기 게이지
+function goldServed(s,se){
+  const bonus=G.endless?80:0; if(bonus){ G.score+=bonus; s.earned+=bonus; }
+  G.fever=Math.max(G.fever,5); chargeSkill(0.12); updateHud();
+  floatText(se.x,se.top?se.y+L.cs*1.35:se.y-L.cs*1.25,bonus?`황금 초밥 +${bonus}`:'황금 초밥! 신바람','#d49a12',21,'bonus');
+  burst(se.bx,se.y,18,{shape:'star',colors:['#ffe27a','#fff6c8','#f5b31f'],speed:230,size:9,life:0.9,up:110});
+  G.flash=Math.max(G.flash,0.12);
+  const c=ac(); if(c&&!progress.sfxOff) [1046,1318,1568,2093].forEach((f,i)=>tone(f,.14,'triangle',.07,0,c.currentTime+i*.06));
+}
+/* ---- 규리 필살기 ----
+   배달·콤보·손님 완료로 게이지가 찬다. 가득 차면 규리(또는 필살기 버튼)를 눌러 발동:
+   ① 지금 앉은 손님 누구도 원하지 않는 벨트 위 초밥을 용량의 30%까지 회수(재료는 줄 맨 아래로 돌아감)
+   ② 4초 동안 규리가 손님이 원하는 재료를 줄 어디에 있든 직접 꺼내 3배 속도로 만든다(용량이 넘치지 않는 만큼만). */
+const SKILL_TIME=4;
+function chargeSkill(v){
+  if(!G.skillOn||G.skillT>0||G.skill>=1) return;
+  G.skill=Math.min(1,G.skill+v);
+  if(G.skill>=1){
+    sfx.done();
+    if(!progress.seenSkill){ progress.seenSkill=1; save.set(progress); G.banner={title:'필살기 준비 완료!',sub:'규리를 톡 눌러 보세요',color:'#e0613a',icon:'skill',dur:4.2}; }
+    else floatText(L.skill.x,L.skill.y-L.skill.r*1.8,'필살기 준비!','#e0613a',17,'info');
+  }
+}
+const wantedNow=()=>{                                   // 앉은 손님이 아직 받지 못한(오고 있지도 않은) 재료 수
+  const want={};
+  for(const s of G.seats) if(s&&!s.leaving&&s.in>=1) for(const it of s.items) if(it.need>0) want[it.type]=(want[it.type]||0)+it.need;
+  const dec=t=>{ if(want[t]) want[t]--; };
+  for(const x of G.slots) if(x) dec(x.type);
+  if(G.ready!==null) dec(G.ready);
+  G.ingredients.forEach(dec); G.flying.forEach(f=>dec(f.type));
+  return want;
+};
+function activateSkill(){
+  if(!G||G.state!=='play'||!G.skillOn||G.skill<1||G.skillT>0) return false;
+  G.skill=0; G.skillT=SKILL_TIME; G.skillPull=0.15; G.flash=0.28; G.shake=0.18;
+  // ① 남는 초밥 회수
+  const wanted=t=>G.seats.some(s=>s&&!s.leaving&&wantsType(s,t));
+  const limit=Math.ceil(G.cfg.capacity*0.3); let back=0;
+  const sp=L.path.len/G.slots.length;
+  for(let i=0;i<G.slots.length&&back<limit;i++){
+    const it=G.slots[i]; if(!it||wanted(it.type)) continue;
+    const q=pathAt(i*sp+G.offset*L.path.len);
+    G.slots[i]=null; back++;
+    const c=[0,1,2,3,4].sort((a,b)=>G.cols[a].length-G.cols[b].length)[0]; colPut(c,it.type,it.gold);
+    ring(q.x,q.y,L.tw*1.2,'#ffb24a'); burst(q.x,q.y,6,{shape:'star',colors:['#ffd84a','#fff'],speed:140,size:7,life:0.5});
+  }
+  G.banner={title:'규리 필살기!',sub:back?`남는 초밥 ${back}개 회수 + 재료 쏙쏙`:'필요한 재료를 쏙쏙 꺼내요',color:'#e0613a',icon:'skill',big:true,tag:'필살',dur:2.4};
+  burst(L.chef.x,L.chef.y,26,{shape:'star',colors:['#ffd84a','#fff3c0','#ff8a3d'],speed:280,size:10,life:1.0,g:140});
+  const c=ac(); if(c&&!progress.sfxOff){ [523,659,784,1046,1318].forEach((f,i)=>tone(f,.18,'square',.05,0,c.currentTime+i*.055)); hiss(.35,.05,1800,c.currentTime); }
+  return true;
+}
+function updateSkill(dt){
+  if(G.skillT<=0) return;
+  G.skillT=Math.max(0,G.skillT-dt); G.skillPull-=dt;
+  if(!G.skillT){ floatText(W/2,L.barY-L.cs*0.3,'필살기 끝','#b07a3c',15,'info'); return; }
+  if(G.skillPull>0) return;
+  G.skillPull=0.24;
+  if(count()>=G.cfg.capacity-3) return;                  // 용량이 넘치지 않게(직접 누를 여유 2칸 이상)
+  const want=wantedNow();
+  let best=-1, bd=1e9;
+  for(let c=0;c<COLS;c++){ const d=G.cols[c].findIndex(t=>want[t]>0); if(d>=0&&d<bd){ bd=d; best=c; } }
+  if(best<0) return;
+  const lane=L.lanes[best], y=L.rowTop+Math.min(bd,L.rows-1)*L.rowH;
+  const {type,gold}=colTake(best,bd);
+  G.flying.push({type,gold,x0:lane.x,y0:y,t:0,dur:0.3,skill:true});
+  G.colFlash[best]=1; if(bd===0) G.colShift[best]=1;
+  ring(lane.x,y,lane.w*0.6,'#ff8a3d'); burst(lane.x,y,5,{shape:'star',colors:['#ffd84a','#fff'],speed:120,size:6,life:0.4});
+  sfx.tap();
 }
 function completeSpecial(s,se){
   const sp=SPECIAL[s.kind]; if(!sp) return;
@@ -933,7 +1067,7 @@ function updateStray(dt){
     if(G.strayT>0) return;
     G.strayT=G.endless?rnd(28,42):rnd(22,34);
     const wanted=t=>G.seats.some(s=>s&&!s.leaving&&wantsType(s,t));
-    const cand=G.slots.map((x,i)=>x&&!wanted(x.type)?i:-1).filter(i=>i>=0);
+    const cand=G.slots.map((x,i)=>x&&!x.gold&&!wanted(x.type)?i:-1).filter(i=>i>=0);
     if(!cand.length){ G.strayT=4; return; }
     G.stray={slot:pick(cand),t:0,ate:false};
     if(!progress.seenStray){ progress.seenStray=1; save.set(progress); G.banner={title:'길고양이 등장!',sub:'남는 초밥 하나를 먹어 줘요',color:'#7d6a58',icon:'stray',dur:4.0}; }   // 처음 한 번만 설명
@@ -947,7 +1081,7 @@ function updateStray(dt){
     if(it){
       const q=pathAt(cat.slot*(L.path.len/G.slots.length)+G.offset*L.path.len);
       G.slots[cat.slot]=null;
-      const c=[0,1,2,3,4].sort((a,b)=>G.cols[a].length-G.cols[b].length)[0]; G.cols[c].push(it.type);
+      const c=[0,1,2,3,4].sort((a,b)=>G.cols[a].length-G.cols[b].length)[0]; colPut(c,it.type,it.gold);
       floatText(clamp(q.x,W*0.3,W*0.7),q.y-L.cs*0.5,'냠! 한 칸 비웠어요','#7d6a58',15,'info');
       burst(q.x,q.y,10,{shape:'heart',colors:['#cbb8a4','#ffb3c0'],speed:130,size:7,life:0.6,up:60});
       sfx.pop();
@@ -973,7 +1107,7 @@ function drawBanner(){
   const inK=clamp(b.t/0.32,0,1), a=b.t>dur-0.45?1-(b.t-(dur-0.45))/0.45:1;
   const c1=1.70158, back=1+(c1+1)*Math.pow(inK-1,3)+c1*Math.pow(inK-1,2);               // 살짝 튕기며 들어온다
   const fs=clamp(W*0.05,14,21), w=Math.min(W*0.84,L.inner.w*1.2,340), h=fs*2.9, y=L.inner.y+L.inner.h*0.5;
-  const icon=b.icon==='vip'?SPR.guests.vip?.happy:b.icon==='rush'?SPR.guests.rush?.happy:b.icon==='stray'?SPR.stray.walk:b.icon==='fever'?SPR.chef.serve:null;
+  const icon=b.img||(b.icon==='vip'?SPR.guests.vip?.happy:b.icon==='rush'?SPR.guests.rush?.happy:b.icon==='stray'?SPR.stray.walk:b.icon==='fever'?SPR.chef.serve:b.icon==='skill'?SPR.chef.skill:b.icon==='gold'?SPR.sushi.tuna:null);
   ctx.save(); ctx.globalAlpha=a; ctx.translate(W/2,y-(1-back)*h*0.9);
   if(b.big){                                   // 특별 손님: 뒤에서 도는 빛줄기
     const R=w*0.78*easeOut(inK), rays=14, rot=b.t*0.9;
@@ -1005,7 +1139,7 @@ function drawBanner(){
     const k3=clamp((b.t-0.35)/0.2,0,1), ss=k3<1?2.2-1.2*easeOut(k3):1;
     if(k3>0){ ctx.save(); ctx.translate(ix+ir*0.55,-h*0.42); ctx.rotate(-0.25); ctx.scale(ss,ss); ctx.globalAlpha*=k3;
       ctx.font=`${fs*0.62}px ${POP_FONT}`; const tw=ctx.measureText(b.tag).width+fs*0.5, th=fs*0.86;
-      ctx.fillStyle=b.icon==='vip'?'#d4402a':'#2f4aa0'; rr(ctx,-tw/2,-th/2,tw,th,th*0.3); ctx.fill();
+      ctx.fillStyle={vip:'#d4402a',rush:'#2f4aa0',group:'#1d6f60',skill:'#b8321e'}[b.icon]||'#d4402a'; rr(ctx,-tw/2,-th/2,tw,th,th*0.3); ctx.fill();
       ctx.strokeStyle='#fff3d6'; ctx.lineWidth=1.6; rr(ctx,-tw/2+2,-th/2+2,tw-4,th-4,th*0.25); ctx.stroke();
       ctx.fillStyle='#fff8e6'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(b.tag,0,1); ctx.restore(); }
   }
@@ -1020,7 +1154,7 @@ function drawBanner(){
       if(k2<=0) return;
       ctx.save(); ctx.translate(mx,-h*0.15-(1-k2)*fs*0.5); ctx.scale(sc,sc);
       ctx.strokeStyle=shade(b.color,-0.5); ctx.lineWidth=fs*0.26; ctx.strokeText(c,0,0);
-      const tg=ctx.createLinearGradient(0,-fs*0.5,0,fs*0.5); tg.addColorStop(0,'#ffffff'); tg.addColorStop(1,b.icon==='vip'?'#ffe58a':'#e3ebff');
+      const tg=ctx.createLinearGradient(0,-fs*0.5,0,fs*0.5); tg.addColorStop(0,'#ffffff'); tg.addColorStop(1,{vip:'#ffe58a',group:'#d6fff3',skill:'#ffe2a0'}[b.icon]||'#e3ebff');
       ctx.fillStyle=tg; ctx.fillText(c,0,0); ctx.restore();
     });
   }else{
@@ -1055,22 +1189,26 @@ function update(dt){
   // 완성한 초밥을 레일에 올릴 때까지 다음 재료를 조리하지 않는다.
   for(const f of G.flying) f.t+=dt/f.dur;
   while(G.flying.length&&G.flying[0].t>=1){
-    G.ingredients.push(G.flying.shift().type);
+    const f=G.flying.shift(); G.ingredients.push(f.type); G.ingGold.push(!!f.gold);
   }
   if(G.ingredients.length&&G.ready===null&&G.chefServe===0){
     if(G.cookTime===null){
       G.cookTime=0; sfx.chop();
-    } else G.cookTime+=dt*(G.fever>0?2:1);
+    } else G.cookTime+=dt*(G.skillT>0?3:G.fever>0?2:1);
     if(G.cookTime>=COOK_TIME){
       G.cookTime=null;
-      G.ready=G.ingredients.shift();
+      G.ready=G.ingredients.shift(); G.readyGold=G.ingGold.shift();
       burst(L.prep.x,L.prep.y,3,{shape:'star',colors:['#fff','#ffe066'],speed:120,size:6,life:0.35,up:60});
     }
   }
   // 재료를 모두 보냈으면 남은 진행을 빨리 감는다
   const rush=!G.endless&&G.cols.every(c=>!c.length)&&!G.flying.length&&!G.ingredients.length, RX=rush?RUSH:G.fever>0?2:1;
   if(G.fever>0){ G.fever=Math.max(0,G.fever-dt); if(!G.fever) floatText(W/2,L.barY-L.cs*0.3,'신바람 끝','#b07a3c',15,'info'); }
-  updateStray(dt);
+  updateStray(dt); updateSkill(dt);
+  if(!progress.seenGold&&!G.banner&&G.gold.some(g=>g.slice(0,L.rows).some(Boolean))){
+    progress.seenGold=1; save.set(progress);
+    G.banner={title:'황금 재료 등장!',sub:'반짝이는 재료로 만든 초밥 = 보너스 + 신바람',color:'#d49a12',icon:'gold',dur:4.5};
+  }
   if(rush&&!G.rush){ G.rush=true; floatText(W/2,L.barY-L.cs*0.4,'재료 끝! 빨리 감기','#ff7a8a',16,'info'); }
   // 손님 등장 / 퇴장
   for(let i=0;i<4;i++){
@@ -1079,6 +1217,20 @@ function update(dt){
       if(!G.queue.length) continue;
       G.seatTimer[i]-=dt*RX;
       if(G.seatTimer[i]>0) continue;
+      const head=G.queue[0];
+      if(head.group){                                    // 단체 손님: 짝 자리(0-1, 2-3)가 함께 비었을 때만 둘이 같이 앉는다
+        const j=i^1; if(G.seats[j]) continue;
+        G.queue.shift();
+        const grp={members:[],earned:0,need:orderNeed(head)};
+        if(G.endless) grp.patMax=grp.pat=patienceFor(G.served,grp.need)*0.85;
+        head.members.forEach((m,x)=>{
+          const g={items:m.items.map(it=>({...it})),need:orderNeed(m),kind:'group',look:m.look,in:0,out:0,leaving:false,bump:0,earned:0,grp};
+          if(grp.patMax){ g.patMax=grp.patMax; g.pat=grp.pat; }
+          grp.members.push(g); G.seats[x?j:i]=g;
+        });
+        grp.seats=[Math.min(i,j),Math.max(i,j)]; if(grp.seats[0]!==i) grp.members.reverse();
+        continue;
+      }
       const c=G.queue.shift();
       const need=orderNeed(c);
       const guest={items:c.items.map(it=>({...it})),need,kind:c.kind||'normal',look:c.look,in:0,out:0,leaving:false,bump:0,earned:0};
@@ -1090,11 +1242,26 @@ function update(dt){
     s.in=Math.min(1,s.in+dt*RX/ARRIVE_TIME); s.bump=Math.max(0,s.bump-dt*4);
     if(s.in>=1&&s.orderAt===undefined){
       s.orderAt=G.time; sfx.arrive();
-      if(SPECIAL[s.kind]) announceSpecial(s.kind);
+      if(SPECIAL[s.kind]&&(!s.grp||s===s.grp.members[0])) announceSpecial(s.kind,s);
       const seat=L.seat[i];
       if(!reduceMotion.matches) burst(seat.bx,seat.y-L.cs*0.23,4,{shape:'star',colors:['#ffc83d','#fff'],size:5,speed:85,life:0.34,up:60});
     }
-    if(s.patMax&&s.in>=1&&!s.leaving){               // 기다리다 지치면 떠난다 (무한 모드 전체, 스테이지는 급한 손님만)
+    if(s.grp&&s.patMax&&s.in>=1&&!s.leaving){         // 단체: 인내심 하나를 둘이 같이 쓴다
+      if(s===s.grp.members[0]) s.grp.pat-=dt;
+      s.pat=s.grp.pat;
+      if(s===s.grp.members[0]&&s.grp.pat<=0){
+        G.shake=0.3; sfx.deny(); G.lives--;
+        for(const m of s.grp.members){
+          m.leaving=true; m.angry=true;
+          const rest=m.items.filter(it=>it.need>0).map(it=>({...it}));
+          if(rest.length) G.queue.unshift({items:rest,kind:'normal',look:m.look});
+        }
+        const a=L.seat[s.grp.seats[0]];
+        floatText(W/2,a.top?a.y+L.cs*0.9:a.y-L.cs*0.75,'단체 손님이 돌아갔어요…','#7f86b3',16,'bad');
+        if(G.lives<=0){ G.state='fail'; G.failReason='lives'; G.endT=1.0; G.shake=0.6; sfx.fail(); updateHud(); return; }
+      }
+    }
+    else if(s.patMax&&s.in>=1&&!s.leaving){          // 기다리다 지치면 떠난다 (무한 모드 전체, 스테이지는 급한 손님만)
       s.pat-=dt;
       if(s.pat<=0){
         s.leaving=true; s.angry=true; G.shake=0.3; sfx.deny();
@@ -1122,7 +1289,7 @@ function update(dt){
       const pastEntry=(pos-L.entryS+len)%len;
       if(G.ready!==null&&(pastEntry<=entryReach||len-pastEntry<=entryReach+step)){
         const travelTime=rush?RUSH_SERVE_TIME:SERVE_TIME;
-        G.slots[i]={type:G.ready,born:G.time,travelTime};
+        G.slots[i]={type:G.ready,born:G.time,travelTime,gold:G.readyGold}; G.readyGold=false;
         // 초밥이 레일에 닿기 전에는 다음 조리 동작을 시작하지 않는다.
         G.ready=null; G.chefServe=travelTime; sfx.pop();
       }
@@ -1136,10 +1303,17 @@ function update(dt){
         G.fx.push({kind:'fly',type:it.type,x0:p.x,y0:p.y,x1:se.bx,y1:se.y,t:0,dur:0.28});
         G.slots[i]=null; want.need--; s.need--; s.bump=1; G.delivered++; updateHud();
         G.combo=(G.time-G.lastServe<1.6)?G.combo+1:1; G.lastServe=G.time;
-        if(G.endless){ const pts=10+Math.min(G.combo-1,10)*2; G.score+=pts; s.earned+=pts; }
+        if(G.endless){ const pts=10+Math.min(G.combo-1,10)*2; G.score+=pts; s.earned+=pts; if(s.grp) s.grp.earned+=pts; }
+        chargeSkill(0.011+(G.combo>1?0.003*Math.min(G.combo,6):0)+(s.need===0?0.025:0));
+        if(it.gold) goldServed(s,se);
         burst(p.x,p.y,5,{shape:'star',colors:['#ffc83d','#fff','#ff7a8a'],speed:120,size:7,life:0.45});
         floatText(se.bx,se.top?se.y+L.cs*0.75:se.y-L.cs*0.5,G.combo>1?`콤보 ×${G.combo}`:'+1',G.combo>1?'#ff7a8a':'#5cc97b',G.combo>1?Math.min(26,19+G.combo):19,G.combo>1?'combo':'score');
-        if(s.need===0){
+        if(s.need===0&&s.grp&&s.grp.members.some(m=>m.need>0)){   // 단체: 먼저 다 먹은 손님은 친구를 기다린다
+          s.waitDone=true; sfx.done();
+          floatText(se.x,se.top?se.y+L.cs*0.9:se.y-L.cs*0.75,'친구 기다려요!','#2f9c86',16,'praise');
+        } else if(s.need===0&&s.grp){
+          completeGroup(s.grp);
+        } else if(s.need===0){
           s.leaving=true; sfx.done(); if(G.endless){ G.score+=50; G.served++; }
           completeSpecial(s,se);
           burst(se.x,se.y,12,{shape:'heart',colors:['#ff7a8a','#ff9bb5','#ffc83d'],speed:170,size:8,life:0.8,up:90});
@@ -1262,7 +1436,9 @@ function orderBox(p,cs){
   const minY=p.top?L.playTop+3:L.by1-rim, maxY=p.top?L.by0+rim:L.barY-4;
   const left=p.x>p.bx, body=cs*0.40;
   const minX=left?3:p.x+body, maxX=left?p.x-body:W-3;
-  return {minY,maxY,minX,maxX,left};
+  let my=maxY; const K=L.skill;
+  if(G?.skillOn&&!p.top&&maxX>K.x-K.r&&minX<K.x+K.r) my=Math.min(maxY,K.y-K.r*1.25);   // 필살기 버튼과 겹치지 않게
+  return {minY,maxY:my,minX,maxX,left};
 }
 function drawOrderCard(s,p,cs,t,scale){
   const r=cs*0.44, items=s.items, n=items.length, rowH=r*0.86, cw=r*1.9, tail=r*0.3;
@@ -1272,7 +1448,8 @@ function drawOrderCard(s,p,cs,t,scale){
   const x=B.left?B.maxX-(tail+cw/2)*fit:B.minX+(tail+cw/2)*fit;
   const y=clamp(p.y-cs*0.05,B.minY+ch*fit/2,B.maxY-ch*fit/2);
   // 손님 종류별 색: 보통(연어빛), VIP(금색), 급한 손님(남색)
-  const TH={vip:{edge:'#b8860b',band:'#f2c23a',chip:'#c98208'},rush:{edge:'#34477f',band:'#6f88cf',chip:'#3e5496'}}[s.kind]
+  const TH={vip:{edge:'#b8860b',band:'#f2c23a',chip:'#c98208'},rush:{edge:'#34477f',band:'#6f88cf',chip:'#3e5496'},
+            group:{edge:'#277f6f',band:'#5ec4ae',chip:'#2a9480'}}[s.kind]
           ||{edge:'#c96748',band:'#f3957a',chip:'#e25b3a'};
   const rad=r*0.3, lw=Math.max(1.6,r*0.075);
   ctx.save();
@@ -1335,6 +1512,89 @@ function drawOrderCard(s,p,cs,t,scale){
   }
   ctx.restore();
 }
+function goldGlow(x,y,r){
+  const k=0.8+0.2*Math.sin(G.time*5+x*0.05);
+  const g=ctx.createRadialGradient(x,y,r*0.15,x,y,r*1.25);
+  g.addColorStop(0,`rgba(255,236,140,${0.95*k})`); g.addColorStop(0.55,`rgba(255,200,60,${0.55*k})`); g.addColorStop(1,'rgba(255,190,40,0)');
+  ctx.fillStyle=g; circle(x,y,r*1.25); ctx.fill();
+}
+function twinkle(x,y,r,seed=0){
+  const k=0.5+0.5*Math.sin(G.time*6+seed*1.7); if(k<0.15) return;
+  ctx.save(); ctx.globalAlpha*=k; starPath(x,y,r*(0.7+0.3*k),G.time*1.5+seed);
+  ctx.fillStyle='#fffbe0'; ctx.strokeStyle='#e8a417'; ctx.lineWidth=Math.max(1,r*0.18); ctx.fill(); ctx.stroke(); ctx.restore();
+}
+// 필살기 버튼: 규리 얼굴 + 아래에서 차오르는 게이지 + 바깥 링. 가득 차면 빛나며 "필살기!" 표가 통통 튄다.
+function drawSkillBtn(){
+  if(!G.skillOn) return;
+  const {x,y,r}=L.skill, f=G.skillT>0?G.skillT/SKILL_TIME:G.skill, ready=G.skill>=1&&G.skillT<=0, on=G.skillT>0;
+  const bob=ready&&!reduceMotion.matches?Math.sin(G.time*7)*0.06:0;
+  ctx.save(); ctx.translate(x,y); ctx.scale(1+bob,1+bob);
+  if(ready||on){                                         // 뒤쪽 빛
+    const R=r*1.75, rg=ctx.createRadialGradient(0,0,r*0.6,0,0,R); rg.addColorStop(0,'rgba(255,200,80,.7)'); rg.addColorStop(1,'rgba(255,160,40,0)');
+    ctx.fillStyle=rg; for(let k=0;k<10;k++){ const a0=G.time*1.6+k*Math.PI/5; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,R,a0,a0+Math.PI/10); ctx.closePath(); ctx.fill(); }
+  }
+  ctx.fillStyle='rgba(80,35,20,.28)'; circle(0,r*0.12,r); ctx.fill();
+  const bg=ctx.createLinearGradient(0,-r,0,r); bg.addColorStop(0,'#fff6e2'); bg.addColorStop(1,'#ffe1b8');
+  ctx.fillStyle=bg; circle(0,0,r); ctx.fill();
+  ctx.save(); circle(0,0,r*0.86); ctx.clip();
+  // 차오르는 물결
+  const lvl=r*0.86-(r*1.72)*f, wave=reduceMotion.matches?0:Math.sin(G.time*4)*r*0.06;
+  const fg=ctx.createLinearGradient(0,-r,0,r); fg.addColorStop(0,on?'#ffd84a':'#ffb24a'); fg.addColorStop(1,on?'#ff9a2e':'#f0743a');
+  ctx.fillStyle=fg; ctx.beginPath(); ctx.moveTo(-r,r); ctx.lineTo(-r,lvl+wave); ctx.quadraticCurveTo(0,lvl-wave*2,r,lvl-wave); ctx.lineTo(r,r); ctx.closePath(); ctx.fill();
+  const face=on?SPR.chef.skill:ready?SPR.chef.serve:SPR.chef.idle;
+  if(face){ if(!ready&&!on) ctx.globalAlpha*=0.9; ctx.drawImage(face,-r*1.25,-r*0.92,r*2.5,r*2.5); ctx.globalAlpha=1; }
+  ctx.restore();
+  // 바깥 링: 남은 양
+  ctx.lineCap='round'; ctx.lineWidth=Math.max(3,r*0.17);
+  ctx.strokeStyle='#8a4b2a'; circle(0,0,r*0.93); ctx.stroke();
+  ctx.strokeStyle=ready?'#ffd84a':on?'#ffe27a':'#ff9a4a'; ctx.beginPath(); ctx.arc(0,0,r*0.93,-Math.PI/2,-Math.PI/2+Math.PI*2*f); ctx.stroke();
+  ctx.lineWidth=1.2; ctx.strokeStyle='rgba(255,255,255,.8)'; circle(0,0,r*0.75); ctx.stroke();
+  ctx.restore();
+  if(ready){                                              // "필살기!" 표
+    const fs=clamp(r*0.6,12,16), ty=y-r*1.42+Math.sin(G.time*6)*2;
+    ctx.font=`${fs}px ${POP_FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const tw=ctx.measureText('필살기!').width+fs*0.9, tx=Math.min(x,W-tw/2-3);
+    ctx.fillStyle='#d4402a'; rr(ctx,tx-tw/2,ty-fs*0.7,tw,fs*1.4,fs*0.7); ctx.fill();
+    ctx.strokeStyle='#fff3d6'; ctx.lineWidth=1.5; rr(ctx,tx-tw/2+2,ty-fs*0.7+2,tw-4,fs*1.4-4,fs*0.6); ctx.stroke();
+    ctx.fillStyle='#fff8e6'; ctx.fillText('필살기!',tx,ty+1);
+  }
+}
+// 단체 손님: 두 사람 사이를 리본으로 잇고 가운데에 "단체" 표(한 명이 다 먹으면 "한 명 더!")
+function drawGroupLinks(){
+  const done=new Set();
+  for(let i=0;i<4;i++){
+    const s=G.seats[i]; if(!s||!s.grp||done.has(s.grp)||s.leaving||s.in<1) continue; done.add(s.grp);
+    const a=L.seat[s.grp.seats[0]], b=L.seat[s.grp.seats[1]], cs=L.cs;
+    const y=a.top?a.y+cs*0.05:a.y+cs*0.1, x0=a.x+cs*0.38, x1=b.x-cs*0.38, mx=(a.x+b.x)/2;
+    const sag=cs*0.12+Math.sin(G.time*3)*cs*0.02;
+    ctx.save(); ctx.lineCap='round';
+    ctx.strokeStyle='#2a9480'; ctx.lineWidth=Math.max(3,cs*0.07);
+    ctx.beginPath(); ctx.moveTo(x0,y); ctx.quadraticCurveTo(mx,y+sag*2,x1,y); ctx.stroke();
+    ctx.strokeStyle='#bff0e3'; ctx.lineWidth=Math.max(1,cs*0.025); ctx.setLineDash([cs*0.06,cs*0.06]); ctx.stroke(); ctx.setLineDash([]);
+    const waiting=s.grp.members.some(m=>m.waitDone), t=waiting?'한 명 더!':'단체';
+    const fs=clamp(cs*0.22,11,15); ctx.font=`${fs}px ${POP_FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const tw=ctx.measureText(t).width+fs*1.1, ty=y+sag, h=fs*1.45;
+    ctx.fillStyle='rgba(30,70,60,.25)'; rr(ctx,mx-tw/2,ty-h/2+2,tw,h,h/2); ctx.fill();
+    const g=ctx.createLinearGradient(0,ty-h/2,0,ty+h/2); g.addColorStop(0,'#5ec4ae'); g.addColorStop(1,'#2a9480');
+    ctx.fillStyle=g; rr(ctx,mx-tw/2,ty-h/2,tw,h,h/2); ctx.fill();
+    ctx.strokeStyle='#e6fff8'; ctx.lineWidth=1.3; rr(ctx,mx-tw/2+2,ty-h/2+2,tw-4,h-4,h/2-2); ctx.stroke();
+    ctx.strokeStyle='#1d5f53'; ctx.lineWidth=fs*0.2; ctx.lineJoin='round'; ctx.strokeText(t,mx,ty+1);
+    ctx.fillStyle='#fff'; ctx.fillText(t,mx,ty+1);
+    ctx.restore();
+  }
+}
+// 단체 손님 고깔모자
+function partyHat(x,y,s,tilt,seed){
+  ctx.save(); ctx.translate(x,y); ctx.rotate(tilt);
+  const w=s*0.34, h=s*0.42, cols=[['#ff8fa3','#ffd84a'],['#7fd8c4','#ffffff'],['#8fa8ff','#ffd84a']][seed%3];
+  ctx.beginPath(); ctx.moveTo(-w/2,0); ctx.lineTo(0,-h); ctx.lineTo(w/2,0); ctx.closePath();
+  ctx.fillStyle=cols[0]; ctx.fill(); ctx.save(); ctx.clip();
+  ctx.strokeStyle=cols[1]; ctx.lineWidth=w*0.16; for(let k=-2;k<4;k++){ ctx.beginPath(); ctx.moveTo(-w,-h*0.25*k); ctx.lineTo(w,-h*0.25*k-h*0.4); ctx.stroke(); }
+  ctx.restore();
+  ctx.strokeStyle='#7a4a3a'; ctx.lineWidth=Math.max(1.2,s*0.025); ctx.beginPath(); ctx.moveTo(-w/2,0); ctx.lineTo(0,-h); ctx.lineTo(w/2,0); ctx.stroke();
+  ctx.fillStyle='#fff3c0'; ctx.strokeStyle='#e0a020'; ctx.lineWidth=1; circle(0,-h,s*0.06); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
 function idleFrame(frames,offset){
   const time=G.time+offset, cycle=Math.floor(time/4.2), within=time%4.2;
   const blinking=!reduceMotion.matches&&(within<0.13||(cycle%3===2&&within>=0.25&&within<0.36));
@@ -1347,7 +1607,7 @@ function drawSeat(i){
   const k=s.leaving?1-easeOut(Math.min(1,s.out)):easeOut(s.in);
   ctx.save(); ctx.globalAlpha=clamp(k*1.4,0,1);
   const y=p.y+dir*(1-k)*cs*0.7 - Math.sin(s.bump*Math.PI)*cs*0.07;
-  const happy=(s.leaving&&!s.angry)||s.bump>0;
+  const happy=(s.leaving&&!s.angry)||s.bump>0||s.waitDone;
   const angry=s.angry||(s.patMax&&s.pat/s.patMax<0.25);
   const guest=SPR.guests[s.look.guest];
   const waiting=s.in>=1&&!s.leaving&&!happy;
@@ -1362,6 +1622,7 @@ function drawSeat(i){
   if(!drawArt(portrait||guest?.idle,p.x-side/2,y-cs*0.58,side,side)){
     drawPerson(p.x,y,cs,s.look,{happy,angry});
   }
+  if(s.grp) partyHat(p.x+(p.x<W/2?cs*0.08:-cs*0.08),y-cs*0.42,cs,p.x<W/2?-0.22:0.22,i);
   ctx.restore();
 }
 function drawSeatOrder(i){
@@ -1402,8 +1663,17 @@ function drawBelt(){
   const reach=serving&&!reduceMotion.matches?G.chefServe/SERVE_TIME:0;
   const chefSize=Math.min(I.h*1.24,I.w*0.62);
   // 조리가 끝나면 완료 자세를 유지하고, 레일에 올린 뒤에만 기본 자세로 돌아간다.
-  const pose=cooking?'cook':G.ready!==null||serving?'serve':'idle';
+  const pose=G.skillT>0&&SPR.chef.skill?'skill':cooking?'cook':G.ready!==null||serving?'serve':'idle';
   const chefBottom=I.y+I.h+tw*0.15;
+  if(G.skillT>0||G.skill>=1){                             // 필살기 중이거나 준비되면 규리 뒤로 빛이 돈다
+    const on=G.skillT>0, R=chefSize*(on?0.62:0.5)*(1+0.05*Math.sin(G.time*8)), cy=chefBottom-chefSize*0.5;
+    ctx.save(); rr(ctx,I.x,I.y,I.w,I.h,I.r); ctx.clip();
+    const rg=ctx.createRadialGradient(L.chef.x,cy,R*0.1,L.chef.x,cy,R);
+    rg.addColorStop(0,on?'rgba(255,220,120,.85)':'rgba(255,230,150,.6)'); rg.addColorStop(1,'rgba(255,170,60,0)');
+    ctx.fillStyle=rg;
+    for(let k=0;k<12;k++){ const a0=G.time*(on?2.2:0.8)+k*Math.PI/6; ctx.beginPath(); ctx.moveTo(L.chef.x,cy); ctx.arc(L.chef.x,cy,R,a0,a0+Math.PI/12); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+  }
   ctx.save();
   ctx.translate(L.chef.x,chefBottom);
   ctx.rotate(stroke*0.075+reach*0.10);
@@ -1428,13 +1698,17 @@ function drawBelt(){
     const t=easeOut(clamp((G.time-it.born)/it.travelTime,0,1));
     const x=L.prep.x+(q.x-L.prep.x)*t;
     const y=L.prep.y+(q.y-L.prep.y)*t-Math.sin(t*Math.PI)*tw*0.18;
+    if(it.gold){ const pr=size*0.5*(0.78+t*0.22);
+      goldGlow(x,y,pr*1.1);
+      ctx.fillStyle='#ffd54a'; ctx.strokeStyle='#b8860b'; ctx.lineWidth=Math.max(1.2,pr*0.08); oval(x,y+pr*0.32,pr*0.95,pr*0.42); ctx.fill(); ctx.stroke(); }
     sprite(SPR.sushi[it.type],x,y,size*(0.78+t*0.22));
+    if(it.gold) twinkle(x+size*0.3,y-size*0.3,size*0.14,i);
   }
 }
 
 function drawBar(){
   const c=count(), cap=G.cfg.capacity, f=c/cap;
-  const x=W*0.08,w=W*0.84,y=L.barY,h=L.barH;
+  const x=W*0.08,w=G.skillOn?L.skill.x-L.skill.r-8-x:W*0.84,y=L.barY,h=L.barH;
   const art=SPR.ui.progress, scale=h/103, capWidth=56, capDraw=capWidth*scale;
   if(art){
     ctx.drawImage(art,capWidth,0,394-2*capWidth,103,x+capDraw-0.5,y,w-2*capDraw+1,h);
@@ -1464,7 +1738,7 @@ function drawBar(){
 function drawBoard(){
   const {x,y,w,h}=L.board, hint=G.stage===1&&!G.tapped&&G.state==='play';
   const bottom=L.laneBottom-(hint?L.rowH:0);
-  const wanted=(G.seats[0]&&G.seats[0].items.find(it=>it.need>0)||G.queue[0]?.items[0])?.type;
+  const wanted=(G.seats[0]&&G.seats[0].items.find(it=>it.need>0)||(G.queue[0]&&entryItems(G.queue[0])[0]))?.type;
   const match=hint?G.cols.findIndex(col=>col[0]===wanted):-1;
   const cue=match>=0?match:G.cols.findIndex(col=>col.length);
   const pulse=reduceMotion.matches?0.65:0.5+Math.sin(G.time*6)*0.5;
@@ -1487,7 +1761,19 @@ function drawBoard(){
     ctx.strokeStyle=guided?'#bb5e2b':'#d69556'; ctx.lineWidth=guided?1.7+pulse:1.5;
     rr(ctx,lane.x-highlightW/2,firstY-highlightH/2,highlightW,highlightH,highlightH*0.28); ctx.fill(); ctx.stroke();
     const n=Math.min(col.length,L.rows-(hint?1:0));
-    for(let j=0;j<n;j++) sprite(SPR.ing[col[j]],lane.x,firstY+j*L.rowH,L.item*(j===0?1:0.88));
+    for(let j=0;j<n;j++){
+      const yy=firstY+j*L.rowH, gold=G.gold[c][j];
+      if(gold){                                            // 황금 재료: 금빛 칸 + 빛
+        goldGlow(lane.x,yy,L.item*0.7);
+        const tw=highlightW*0.96, th=highlightH*0.94, gg=ctx.createLinearGradient(0,yy-th/2,0,yy+th/2);
+        gg.addColorStop(0,'#fff4b8'); gg.addColorStop(1,'#ffcf3f');
+        ctx.fillStyle=gg; rr(ctx,lane.x-tw/2,yy-th/2,tw,th,th*0.28); ctx.fill();
+        ctx.strokeStyle='#d99a0e'; ctx.lineWidth=2; ctx.stroke();
+        ctx.strokeStyle='rgba(255,255,255,.8)'; ctx.lineWidth=1; rr(ctx,lane.x-tw/2+2.5,yy-th/2+2.5,tw-5,th-5,th*0.24); ctx.stroke();
+      }
+      sprite(SPR.ing[col[j]],lane.x,yy,L.item*(j===0?1:0.88));
+      if(gold) twinkle(lane.x+L.item*0.36,yy-L.item*0.32,L.item*0.16,c);
+    }
     ctx.restore();
   }
   if(hint){
@@ -1522,10 +1808,12 @@ function draw(){
   drawStray();
   drawSeat(2); drawSeat(3);            // 아래쪽 손님은 벨트 앞
   ctx.restore();
-  drawBar(); drawBoard();
+  drawBar(); drawBoard(); drawSkillBtn();
+  drawGroupLinks();
   for(let i=0;i<4;i++) drawSeatOrder(i);   // 주문은 항상 맨 위(벨트·손님·고양이에 가리지 않게)
   for(const f of G.flying){ const e=easeOut(Math.min(1,f.t));     // 날아가는 재료
     const x=f.x0+(L.prep.x-f.x0)*e, y=f.y0+(L.prep.y-f.y0)*e-Math.sin(e*Math.PI)*L.cs*0.6;
+    if(f.gold) goldGlow(x,y,L.item*0.75);
     ctx.save(); ctx.translate(x,y); ctx.rotate(e*Math.PI*2); sprite(SPR.ing[f.type],0,0,L.item*(1.15-0.35*e)); ctx.restore(); }
   for(const f of G.fx){ const e=easeOut(f.t);
     sprite(SPR.sushi[f.type],f.x0+(f.x1-f.x0)*e,f.y0+(f.y1-f.y0)*e-Math.sin(e*Math.PI)*12,L.cs*0.55*(1-0.4*e)); }
@@ -2030,6 +2318,10 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden) pause(); 
 cv.addEventListener('pointerdown',e=>{
   e.preventDefault(); ac();
   const r=cv.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+  if(G&&G.skillOn){                                      // 필살기 버튼 또는 규리(주방 창)를 누르면 발동
+    const K=L.skill, I=L.inner, onBtn=Math.hypot(x-K.x,y-K.y)<=K.r*1.3, onChef=x>=I.x&&x<=I.x+I.w&&y>=I.y-L.tw&&y<=I.y+I.h+L.tw*0.3;
+    if(onBtn||onChef){ if(!activateSkill()&&onBtn&&G.state==='play'&&G.skillT<=0) floatText(K.x-K.r*0.4,K.y-K.r*1.6,`${Math.floor(G.skill*100)}%`,'#b07a3c',14,'info'); return; }
+  }
   if(y<L.board.y||y>L.board.y+L.board.h) return;
   const col=L.lanes.findIndex(lane=>x>=lane.left&&x<lane.right);
   if(col>=0) tapColumn(col);
@@ -2045,7 +2337,7 @@ function frame(t){
   draw();
   requestAnimationFrame(frame);
 }
-window.__game={ get G(){return G;}, pendingScore, syncPlayer, get auth(){return auth;}, DEV_TOOLS, REDIRECT_URI, END, buildVerified, buildStage, solvable, tapColumn, startStage, count, update };   // 디버그/테스트용
+window.__game={ get G(){return G;}, pendingScore, syncPlayer, get auth(){return auth;}, DEV_TOOLS, REDIRECT_URI, END, buildVerified, buildStage, solvable, tapColumn, startStage, count, update, activateSkill };   // 디버그/테스트용
 layout();
 const fontReady=(document.fonts&&document.fonts.load)?Promise.race([Promise.all([document.fonts.load('20px Jua'),document.fonts.load('20px "Black Han Sans"')]).catch(()=>{}),new Promise(r=>setTimeout(r,1500))]):Promise.resolve();
 Promise.all([loadAssets(),fontReady,handleAuthCallback()]).then(([,,cb])=>{
