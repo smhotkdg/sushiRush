@@ -5,7 +5,6 @@ SRC='assets/restaurant/'; OUT=sys.argv[1] if len(sys.argv)>1 else 'assets/restau
 import os; os.makedirs(OUT,exist_ok=True)
 INK=(74,42,28,255); S=4
 def layer(w,h): im=Image.new('RGBA',(w*S,h*S),(0,0,0,0)); return im, ImageDraw.Draw(im)
-def down(im,w,h): return im.resize((w,h),Image.LANCZOS)
 def P(*pts): return [(x*S,y*S) for x,y in pts]
 
 def recolor(im, test, hue, sat_mul=1.0, light_add=0.0, region=None):
@@ -32,7 +31,7 @@ def crown(cx,base,wd):           # 금왕관: 바닥 중심 (cx, base), 너비 w
     for (tx,ty) in [(x0+wd*0.04,base-h*0.78),(cx,base-h),(x0+wd*0.96,base-h*0.78)]:
         r=wd*0.06; d.ellipse([(tx-r)*S,(ty-r)*S,(tx+r)*S,(ty+r)*S],fill=(255,236,150,255),outline=INK,width=int(1.2*S))
     d.line(P((x0+wd*0.12,base-h*0.55),(x0+wd*0.16,base-h*0.30)),fill=(255,240,190,230),width=int(1.6*S))
-    return down(im,160,160)
+    return im
 
 def sparkle(img,pts):
     im,d=layer(160,160)
@@ -41,7 +40,7 @@ def sparkle(img,pts):
         for k in range(8):
             a=k*math.pi/4; rr_=r if k%2==0 else r*0.32; star.append((x+math.cos(a)*rr_,y+math.sin(a)*rr_))
         d.polygon(P(*star),fill=(255,214,90,255),outline=(176,116,20,255),width=int(0.8*S))
-    img.alpha_composite(down(im,160,160)); return img
+    composite(img, im); return img
 
 def necktie(cx,top,length):
     im,d=layer(160,160); w=length*0.44
@@ -49,7 +48,7 @@ def necktie(cx,top,length):
     d.polygon(P((cx-w*0.22,top+length*0.16),(cx+w*0.22,top+length*0.16),(cx+w*0.5,top+length*0.86),(cx,top+length),(cx-w*0.5,top+length*0.86)),fill=(62,84,150,255),outline=INK,width=int(2*S))
     for k in range(3):
         y=top+length*(0.32+k*0.18); d.line(P((cx-w*0.32,y+3),(cx+w*0.32,y-3)),fill=(232,196,90,255),width=int(2*S))
-    return down(im,160,160)
+    return im
 
 def sweat(x,y,r):
     im,d=layer(160,160)
@@ -58,7 +57,7 @@ def sweat(x,y,r):
     d.line(P((x,y-r*1.9),(x+r*0.95,y-r*0.1)),fill=(52,110,170,255),width=int(1.6*S)); d.line(P((x,y-r*1.9),(x-r*0.95,y-r*0.1)),fill=(52,110,170,255),width=int(1.6*S))
     d.arc([(x-r)*S,(y-r)*S,(x+r)*S,(y+r)*S],0,180,fill=(52,110,170,255),width=int(1.6*S))
     d.ellipse([(x-r*0.45)*S,(y-r*0.6)*S,(x-r*0.05)*S,(y-r*0.1)*S],fill=(255,255,255,220))
-    return down(im,160,160)
+    return im
 
 def clock(x,y,r):
     im,d=layer(160,160)
@@ -67,7 +66,7 @@ def clock(x,y,r):
     d.line(P((x,y),(x,y-r*0.6)),fill=INK,width=int(2*S)); d.line(P((x,y),(x+r*0.45,y+r*0.15)),fill=INK,width=int(2*S))
     for a in (-0.55,0.55):
         bx,by=x+math.sin(a)*r*1.05,y-math.cos(a)*r*1.05; d.ellipse([(bx-r*0.28)*S,(by-r*0.28)*S,(bx+r*0.28)*S,(by+r*0.28)*S],fill=(214,90,64,255),outline=INK,width=int(1.2*S))
-    return down(im,160,160)
+    return im
 
 def bandage(x,y,wd,ang,size=160):
     im,d=layer(size,size); h=wd*0.36
@@ -80,7 +79,14 @@ def bandage(x,y,wd,ang,size=160):
     for k in (-1,1):
         for j in (-1,1):
             px_,py_=rot(k*wd*0.33,j*h*0.18); r=0.9; d.ellipse([(px_-r)*S,(py_-r)*S,(px_+r)*S,(py_+r)*S],fill=(196,140,100,255))
-    return down(im,size,size)
+    return im
+
+# 소품 좌표는 원래 160/192px 그림 기준이다. 새 원본에서도 같은 위치에 합성한다.
+def composite(img, overlay):
+    img.alpha_composite(overlay.resize(img.size, Image.Resampling.LANCZOS))
+
+def scale_region(region, size, base):
+    return tuple(round(value * length / base) for value, length in zip(region, size * 2))
 
 def save(im,name): im.save(OUT+name+'.webp','WEBP',quality=92,method=6,lossless=False)
 
@@ -88,8 +94,8 @@ def save(im,name): im.save(OUT+name+'.webp','WEBP',quality=92,method=6,lossless=
 VIP={'idle':(80,33,44),'blink':(80,33,44),'happy':(80,31,44),'angry':(82,33,44)}
 for st,(cx,base,wd) in VIP.items():
     im=Image.open(SRC+f'tuxedo_{st}.webp').convert('RGBA')
-    im=recolor(im,red,44,sat_mul=1.05,light_add=0.12,region=(30,92,140,140))   # 빨간 나비넥타이 → 금색
-    im.alpha_composite(crown(cx,base,wd))
+    im=recolor(im,red,44,sat_mul=1.05,light_add=0.12,region=scale_region((30,92,140,140), im.size, 160))   # 빨간 나비넥타이 → 금색
+    composite(im, crown(cx,base,wd))
     if st in ('idle','happy'): im=sparkle(im,[(28,40,7),(138,96,5),(22,104,4)])
     save(im,'vip_'+st)
 
@@ -97,9 +103,9 @@ for st,(cx,base,wd) in VIP.items():
 RUSH={'idle':(80,112,44),'blink':(80,112,44),'happy':(80,110,44),'angry':(84,112,44)}
 for st,(cx,top,ln) in RUSH.items():
     im=Image.open(SRC+f'shiba_{st}.webp').convert('RGBA')
-    im.alpha_composite(necktie(cx,top,ln))
-    if st!='happy': im.alpha_composite(sweat(30,58 if st!='angry' else 52,6))
-    im.alpha_composite(clock(24,24,13))
+    composite(im, necktie(cx,top,ln))
+    if st!='happy': composite(im, sweat(30,58 if st!='angry' else 52,6))
+    composite(im, clock(24,24,13))
     save(im,'rush_'+st)
 
 # ---------- 길고양이 (삼색이 → 회갈색 길냥이) ----------
@@ -111,7 +117,7 @@ def stray(src,st,bx,by,ang):
     mixed=Image.blend(gray,Image.composite(tint,gray,Image.new('L',im.size,90)),0.35)
     out=Image.merge('RGBA',(*mixed.split(),a))
     out=recolor(out,lambda r,g,b: b>r*0.9 and r<140 and g<120,0,sat_mul=0.0)  # 보라 목줄 제거(회색)
-    out.alpha_composite(bandage(bx,by,30,ang,192))
+    composite(out, bandage(bx,by,30,ang,192))
     save(out,'stray_'+st)
 stray('calico_idle.webp','walk',100,40,-0.5)
 stray('calico_happy.webp','eat',98,44,-0.4)
