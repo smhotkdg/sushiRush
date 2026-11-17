@@ -158,7 +158,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v0.5';
+const VERSION = 'v0.6';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 function stageConfig(n){
   return {
@@ -237,23 +237,48 @@ function solvable(st){
 }
 // 무한 모드: 손님 k명째 기준 난이도
 function endlessCfg(k){
-  return { types:Math.min(3+Math.floor(k/6),TYPE_ORDER.length), customers:0, orderMin:3, orderMax:Math.min(4+Math.floor(k/8),8),
-           capacity:18, mix:Math.min(2+k*0.08,6), loop:Math.max(5,11-k*0.04), spawnGap:0.9 };
+  return { types:Math.min(3+Math.floor(k/8),TYPE_ORDER.length), customers:0, orderMin:3, orderMax:Math.min(4+Math.floor(k/8),8),
+           capacity:18, mix:Math.min(1.2+k*0.03,3), loop:Math.max(5,11-k*0.04), spawnGap:0.9 };
 }
 const patienceFor=(served,need)=>Math.max(5,42-served*0.3)+need*1.6;   // 손님 인내심(초)
-function refill(){                       // 손님 6명과 그 주문만큼의 재료를 이어 붙인다
-  const cfg=endlessCfg(G.gen), types=TYPE_ORDER.slice(0,cfg.types), runs=[];
-  for(let i=0;i<6;i++){
-    let t; do{ t=pick(types); }while(t===G.lastType); G.lastType=t;
-    const need=rnd(cfg.orderMin,cfg.orderMax); G.queue.push({type:t,need,look:randomLook()});
-    let left=need; while(left>0){ const k=Math.min(left,rnd(1,3)); runs.push({type:t,k,key:i+Math.random()*cfg.mix}); left-=k; }
-  }
-  runs.sort((a,b)=>a.key-b.key);
-  for(const r of runs){
-    const idx=[0,1,2,3,4].sort((a,b)=>G.cols[a].length-G.cols[b].length), c=idx[Math.random()<0.55?0:rnd(1,2)];
+const ENDLESS_ROWS=12;                  // 무한 모드에서 각 줄에 항상 쌓아 둘 재료 수
+// 손님 1명을 예약하고 그 주문만큼의 재료를 대기열(pool)에 넣는다.
+// 재료는 손님 순서(key)대로 줄 아래에 이어 붙으므로, 각 줄의 위쪽에는 항상 "곧 올 손님"의 재료가 온다.
+// 섞임 폭(mix)이 3명 이내라서, 필요한 재료 위에 있는 것은 지금 앉아 있거나 바로 다음 손님의 재료뿐이다.
+function genCustomer(){
+  const i=G.gen++, cfg=endlessCfg(i), types=TYPE_ORDER.slice(0,cfg.types);
+  let t; do{ t=pick(types); }while(t===G.lastType); G.lastType=t;
+  const need=rnd(cfg.orderMin,cfg.orderMax); G.queue.push({type:t,need,look:randomLook()});
+  let left=need; while(left>0){ const k=Math.min(left,rnd(1,3)); G.pool.push({type:t,k,key:i+Math.random()*cfg.mix}); left-=k; }
+  G.pool.sort((a,b)=>a.key-b.key);
+  while(G.pool.length&&G.pool[0].key<G.gen){             // 이후 손님의 key 는 모두 G.gen 이상이므로 순서가 확정된 것만 내보낸다
+    const r=G.pool.shift(), idx=[0,1,2,3,4].sort((a,b)=>G.cols[a].length-G.cols[b].length), c=idx[Math.random()<0.7?0:1];
     for(let j=0;j<r.k;j++) G.cols[c].push(r.type);
   }
-  G.gen+=6;
+}
+function refill(){                       // 가장 짧은 줄이 ENDLESS_ROWS 개가 될 때까지 계속 채운다
+  let guard=0;
+  while(Math.min(...G.cols.map(c=>c.length))<ENDLESS_ROWS&&guard++<80) genCustomer();
+}
+// 막힘 방지(0.5초마다): 앉아 있는 손님이 원하는 초밥이 벨트로 오는 중이 아닌데
+// 그 재료가 너무 깊이 묻혀 있거나(여유 있을 땐 3칸, 인내심이 절반 아래면 1칸 초과)
+// 벨트 여유 안에서 꺼낼 수 없으면, 가장 가까운 것을 그 줄의 맨 위로 끌어올린다.
+function unblock(){
+  const have={};
+  for(const x of G.slots) if(x) have[x.type]=(have[x.type]||0)+1;
+  for(const x of G.pending) have[x]=(have[x]||0)+1;
+  for(const f of G.flying) have[f.type]=(have[f.type]||0)+1;
+  const free=G.cfg.capacity-count(); if(free<=0) return;
+  const seated=G.seats.filter(s=>s&&!s.leaving&&s.in>=1&&!have[s.type]).sort((a,b)=>a.pat/a.patMax-b.pat/b.patMax);
+  for(const s of seated){
+    let best=-1, bd=1e9;
+    for(let c=0;c<COLS;c++){ const d=G.cols[c].indexOf(s.type); if(d>=0&&d<bd){ bd=d; best=c; } }
+    const limit=s.pat/s.patMax<0.5?1:3;
+    if(best<0||(bd<=limit&&bd+1<=free)) continue;           // 충분히 가까이 있다
+    const col=G.cols[best]; col.unshift(col.splice(bd,1)[0]); G.rescues++;
+    const x=L.pad+L.colW*(best+0.5); ring(x,L.rowTop,L.colW*0.7,'#ffc83d'); burst(x,L.rowTop,6,{shape:'star',colors:['#ffc83d','#fff'],speed:120,size:7,life:0.5});
+    return;                                                  // 한 번에 하나씩
+  }
 }
 function buildVerified(n){
   let st, tries=0;
@@ -428,7 +453,7 @@ function startStage(n,endless){
       slots:Array(st.cfg.capacity).fill(null), offset:0,     // offset: 벨트 회전량(0~1)
       pending:[], flying:[], fx:[], parts:[], danger:0, warned:-1, state:'play', time:0, endT:0, chefBusy:0, barShake:0,
       shake:0, combo:0, lastServe:-9, confT:0, tapped:false };
-  if(endless){ Object.assign(G,{endless:true,lives:3,score:0,served:0,gen:0,lastType:null,hudKey:''}); refill(); }
+  if(endless){ Object.assign(G,{endless:true,lives:3,score:0,served:0,gen:0,lastType:null,hudKey:'',pool:[],stallT:0,rescues:0}); refill(); }
   document.getElementById('stageLabel').textContent='STAGE '+n;
   document.querySelector('#progress .chk').textContent=endless?'★':'✓';
   hideOverlay(); updateHud();
@@ -468,7 +493,8 @@ function update(dt){
     G.endT-=dt; if(G.endT<=0&&!overlayShown()) showResult(); return;
   }
   if(G.endless){
-    G.cfg.loop=endlessCfg(G.served).loop; if(G.queue.length<4) refill();
+    G.cfg.loop=endlessCfg(G.served).loop; refill();
+    G.stallT-=dt; if(G.stallT<=0){ G.stallT=0.5; unblock(); }
     const key=G.score+'|'+Math.floor(G.time)+'|'+G.lives; if(key!==G.hudKey){ G.hudKey=key; updateHud(); }
   }
   // 재료가 주방장에게 날아감
