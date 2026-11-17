@@ -255,6 +255,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
    ===================================================================== */
 const VERSION = 'v0.8';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
+const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
 const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
 function stageConfig(n){
@@ -301,7 +302,8 @@ function buildStage(n,mixScale=1){
 // 봇은 사람보다 불리한 조건(초당 3번 터치, 벨트를 용량-2 까지만 사용)으로 플레이하므로
 // 봇이 푼 판은 사람도 풀 수 있다.
 function solvable(st){
-  const cfg=st.cfg, N=cfg.capacity, tick=cfg.loop/N, len=L.path.len;
+  const cfg=st.cfg, N=Math.max(cfg.capacity,MIN_RAIL_SLOTS), limit=cfg.capacity-2;
+  const tick=cfg.loop/N, len=L.path.len;
   const cols=st.cols.map(c=>c.slice()), queue=st.queue.map(c=>({type:c.type,need:c.need}));
   const seatIdx=L.seatS.map(v=>Math.floor(v/len*N)%N), entryIdx=Math.floor(L.entryS/len*N)%N;
   const arrive=Math.ceil((cfg.spawnGap+LEAVE_TIME+ARRIVE_TIME)/tick)+1, taps=Math.max(1,Math.floor(tick*3));
@@ -321,11 +323,11 @@ function solvable(st){
       for(const s of seats) if(s) want[s.type]=(want[s.type]||0)+s.need;
       for(const x of slots) if(x){ cnt++; have[x]=(have[x]||0)+1; }
       for(const x of pending) have[x]=(have[x]||0)+1;
-      if(cnt>=N-2) break;
+      if(cnt>=limit) break;
       const need=x=>(want[x]||0)>(have[x]||0);
       let best=-1, bd=1e9;
       for(let c=0;c<COLS;c++){ const d=cols[c].findIndex(need); if(d>=0&&d<bd){ bd=d; best=c; } }
-      if(best<0||cnt+bd+1>N-2) break;                            // 파내도 벨트가 넘치지 않을 때만 판다
+      if(best<0||cnt+bd+1>limit) break;                          // 파내도 벨트가 넘치지 않을 때만 판다
       pending.push(cols[best].shift()); idle=0;
     }
     if(++idle>N*4) return false;                                 // 4바퀴 동안 진전이 없으면 실패
@@ -649,7 +651,7 @@ function startStage(n,endless){
   G={ tries:st.tries, verified:st.verified, stage:n, cfg:st.cfg, cols:st.cols, colShift:Array(COLS).fill(0), colFlash:Array(COLS).fill(0),
       queue:st.queue, total:st.total, delivered:0,
       seats:[null,null,null,null], seatTimer:FIRST_ARRIVALS.slice(),
-      slots:Array(st.cfg.capacity).fill(null), offset:0,     // offset: 벨트 회전량(0~1)
+      slots:Array(Math.max(st.cfg.capacity,MIN_RAIL_SLOTS)).fill(null), offset:0, // offset: 벨트 회전량(0~1)
       ingredients:[], cookTime:null, ready:null, flying:[], fx:[], parts:[], state:'play', time:0, endT:0, chefServe:0,
       shake:0, combo:0, lastServe:-9, confT:0, tapped:false };
   if(endless){ Object.assign(G,{endless:true,lives:3,score:0,served:0,gen:0,lastType:null,hudKey:'',pool:[],stallT:0,rescues:0}); refill(); }
@@ -754,14 +756,15 @@ function update(dt){
   // 벨트 회전: 빈 슬롯이 입구를 지나면 초밥을 올리고, 손님 앞을 지나면 손님이 가져감
   const len=L.path.len, sp=len/G.slots.length, stepF=dt/G.cfg.loop, step=stepF*len;
   const crossed=(pos,target)=>(((target-pos)%len)+len)%len<step;
-  const entryGrace=Math.min(sp*0.2,len*0.17/G.cfg.loop);
+  // 조리대에서 닿을 수 있는 가까운 칸은 입구를 정확히 통과하기 전후에도 사용한다.
+  const entryReach=Math.min(sp*0.4,L.tw*0.93);
   for(let sub=0;sub<RX;sub++){
   const prev=G.offset*len; G.offset=(G.offset+stepF)%1;
   for(let i=0;i<G.slots.length;i++){
     const pos=(i*sp+prev)%len, it=G.slots[i];
     if(!it){
       const pastEntry=(pos-L.entryS+len)%len;
-      if(G.ready!==null&&(pastEntry<entryGrace||crossed(pos,L.entryS))){
+      if(G.ready!==null&&(pastEntry<=entryReach||len-pastEntry<=entryReach+step)){
         const travelTime=rush?RUSH_SERVE_TIME:SERVE_TIME;
         G.slots[i]={type:G.ready,born:G.time,travelTime};
         // 초밥이 레일에 닿기 전에는 다음 조리 동작을 시작하지 않는다.
