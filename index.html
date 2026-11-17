@@ -341,8 +341,9 @@ function unblock(){
   const have={};
   for(const x of G.slots) if(x) have[x.type]=(have[x.type]||0)+1;
   for(const x of G.pending) have[x]=(have[x]||0)+1;
+  for(const x of G.ingredients) have[x]=(have[x]||0)+1;
   for(const f of G.flying) have[f.type]=(have[f.type]||0)+1;
-  const free=G.cfg.capacity-count(); if(free<=0) return;
+  const free=G.cfg.capacity-count()-1; if(free<=0) return;
   const seated=G.seats.filter(s=>s&&!s.leaving&&s.in>=1&&!have[s.type]).sort((a,b)=>a.pat/a.patMax-b.pat/b.patMax);
   for(const s of seated){
     let best=-1, bd=1e9;
@@ -565,7 +566,7 @@ function startStage(n,endless){
       queue:st.queue, total:st.total, delivered:0,
       seats:[null,null,null,null], seatTimer:FIRST_ARRIVALS.slice(),
       slots:Array(st.cfg.capacity).fill(null), offset:0,     // offset: 벨트 회전량(0~1)
-      pending:[], flying:[], fx:[], parts:[], state:'play', time:0, endT:0, chefBusy:0, chefServe:0, barShake:0,
+      ingredients:[], cookTime:0, pending:[], flying:[], fx:[], parts:[], state:'play', time:0, endT:0, chefServe:0,
       shake:0, combo:0, lastServe:-9, confT:0, tapped:false };
   if(endless){ Object.assign(G,{endless:true,lives:3,score:0,served:0,gen:0,lastType:null,hudKey:'',pool:[],stallT:0,rescues:0}); refill(); }
   document.getElementById('stageLabel').textContent='STAGE '+n;
@@ -574,8 +575,10 @@ function startStage(n,endless){
   hideOverlay(); updateHud();
 }
 const RUSH=5;          // 재료를 다 보낸 뒤 빨리 감기 배속
-function railCount(){ return G.slots.filter(Boolean).length; }
-function count(){ return railCount()+G.pending.length+G.flying.length; }
+const COOK_TIME=0.28;
+function count(){
+  return G.slots.filter(Boolean).length+G.pending.length+G.ingredients.length+G.flying.length;
+}
 const fmtTime=t=>Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');
 function updateHud(){
   if(G.endless){
@@ -588,19 +591,21 @@ function updateHud(){
 function tapColumn(c){
   if(!G||G.state!=='play') return;
   const col=G.cols[c]; if(!col.length) return;
-  if(G.cfg.capacity-count()<=0){ G.barShake=0.35; sfx.deny(); return; }
   const type=col.shift(), lane=L.lanes[c], x=lane.x, y=L.rowTop+G.colShift[c]*L.rowH;
   G.flying.push({type,x0:x,y0:y,t:0,dur:0.34});
   G.colShift[c]=1; G.colFlash[c]=1; G.tapped=true;
   ring(x,y,lane.w*0.55,'#ffc83d'); burst(x,y,4,{shape:'star',colors:['#ffc83d','#fff'],speed:110,size:6,life:0.4});
   sfx.tap();
+  if(count()>=G.cfg.capacity){
+    G.state='fail'; G.failReason='full'; G.endT=0.8; G.shake=0.45; sfx.fail();
+  }
 }
 
 function update(dt){
   if(G.state==='pause') return;
   G.time+=dt;
   for(let c=0;c<COLS;c++){ G.colShift[c]=Math.max(0,G.colShift[c]-dt*14*Math.max(1,G.colShift[c])); G.colFlash[c]=Math.max(0,G.colFlash[c]-dt*5); }
-  G.barShake=Math.max(0,G.barShake-dt); G.chefBusy=Math.max(0,G.chefBusy-dt); G.chefServe=Math.max(0,G.chefServe-dt); G.shake=Math.max(0,G.shake-dt);
+  G.chefServe=Math.max(0,G.chefServe-dt); G.shake=Math.max(0,G.shake-dt);
   for(const f of G.fx) f.t+=dt/f.dur; G.fx=G.fx.filter(f=>f.t<1);
   updateParts(dt);
   if(G.state!=='play'){
@@ -612,14 +617,25 @@ function update(dt){
     G.stallT-=dt; if(G.stallT<=0){ G.stallT=0.5; unblock(); }
     const key=G.score+'|'+Math.floor(G.time)+'|'+G.lives; if(key!==G.hudKey){ G.hudKey=key; updateHud(); }
   }
-  // 재료가 주방장에게 날아감
+  // 재료는 도착 순서대로 하나씩 조리한 후 레일 투입을 기다린다.
+  const wasCooking=G.ingredients.length>0;
   for(const f of G.flying) f.t+=dt/f.dur;
   while(G.flying.length&&G.flying[0].t>=1){
-    G.pending.push(G.flying.shift().type); G.chefBusy=0.35; sfx.chop();
-    burst(L.prep.x,L.prep.y,3,{shape:'star',colors:['#fff','#ffe066'],speed:120,size:6,life:0.35,up:60});
+    G.ingredients.push(G.flying.shift().type);
+  }
+  if(G.ingredients.length){
+    if(wasCooking) G.cookTime+=dt;
+    else sfx.chop();
+    while(G.ingredients.length&&G.cookTime>=COOK_TIME){
+      G.cookTime-=COOK_TIME;
+      G.pending.push(G.ingredients.shift());
+      burst(L.prep.x,L.prep.y,3,{shape:'star',colors:['#fff','#ffe066'],speed:120,size:6,life:0.35,up:60});
+      if(G.ingredients.length) sfx.chop();
+      else G.cookTime=0;
+    }
   }
   // 재료를 모두 보냈으면 남은 진행을 빨리 감는다
-  const rush=!G.endless&&G.cols.every(c=>!c.length)&&!G.flying.length, RX=rush?RUSH:1;
+  const rush=!G.endless&&G.cols.every(c=>!c.length)&&!G.flying.length&&!G.ingredients.length, RX=rush?RUSH:1;
   if(rush&&!G.rush){ G.rush=true; floatText(W/2,L.barY-L.cs*0.4,'재료 끝!','#ff7a8a',24); }
   // 손님 등장 / 퇴장
   for(let i=0;i<4;i++){
@@ -662,10 +678,6 @@ function update(dt){
     if(!it){
       if(G.pending.length&&crossed(pos,L.entryS)){
         G.slots[i]={type:G.pending.shift(),born:G.time}; G.chefServe=0.24; sfx.pop();
-        if(G.slots.every(Boolean)){
-          G.state='fail'; G.failReason='full'; G.endT=0.8; G.shake=0.45; sfx.fail();
-          return;
-        }
       }
       continue;
     }
@@ -827,17 +839,27 @@ function drawBelt(){
   ctx.strokeStyle='#fff7f2'; ctx.lineWidth=tw-6; track(); ctx.stroke();
   }
   // 주방장과 도구는 벨트 테두리 앞에 표시한다.
-  const busy=G.chefBusy>0?Math.sin(G.time*38)*L.chef.s*0.035:0;
+  const cooking=G.ingredients.length>0;
+  const stroke=cooking&&!reduceMotion.matches?Math.sin(Math.PI*G.cookTime/COOK_TIME):0;
   const chefSize=Math.min(I.h*1.24,I.w*0.62);
-  const pose=G.chefServe>0?'serve':G.chefBusy>0?'cook':'idle';
+  const pose=cooking?'cook':G.chefServe>0?'serve':'idle';
   const chefBottom=I.y+I.h+tw*0.15;
-  if(!drawArt(SPR.chef[pose]||SPR.chef.idle,L.chef.x-chefSize/2,chefBottom-chefSize+busy,chefSize,chefSize)){
-    drawPerson(L.chef.x,L.chef.y-L.chef.s*0.12+busy,L.chef.s,CHEF,{chef:true,happy:G.chefBusy>0});
+  ctx.save();
+  ctx.translate(L.chef.x,chefBottom);
+  ctx.rotate(stroke*0.075);
+  ctx.scale(1+stroke*0.04,1-stroke*0.05);
+  if(!drawArt(SPR.chef[pose]||SPR.chef.idle,-chefSize/2,-chefSize,chefSize,chefSize)){
+    drawPerson(0,L.chef.y-L.chef.s*0.12-chefBottom,L.chef.s,CHEF,{chef:true,happy:cooking});
   }
-  // 조리대 위 대기 재료
-  const n=Math.min(G.pending.length,6), prepLeft=L.prep.x+chefSize*0.39;
+  ctx.restore();
+  // 조리대 위에서 대기하는 초밥과 재료
+  const n=Math.min(G.pending.length+Math.max(0,G.ingredients.length-1),6);
+  const prepLeft=L.prep.x+chefSize*0.39;
   const ps=Math.min(L.item*0.65,I.h*0.3,(I.x+I.w-prepLeft)/6);
-  for(let i=0;i<n;i++) sprite(SPR.ing[G.pending[i]],prepLeft+(i+0.5)*ps,L.prep.y,ps);
+  for(let i=0;i<n;i++){
+    const img=i<G.pending.length?SPR.sushi[G.pending[i]]:SPR.ing[G.ingredients[i-G.pending.length+1]];
+    sprite(img,prepLeft+(i+0.5)*ps,L.prep.y,ps);
+  }
   // 빈 슬롯은 보이지 않고, 초밥만 레일 중심을 따라 이동한다.
   const N=G.slots.length, sp=p.len/N, size=Math.min(sp*0.95,tw*1.12);
   for(let i=0;i<N;i++){
@@ -851,9 +873,8 @@ function drawBelt(){
 }
 
 function drawBar(){
-  const c=railCount(), cap=G.cfg.capacity, f=c/cap;
-  const sh=G.barShake>0?Math.sin(G.barShake*60)*4:0;
-  const x=W*0.08+sh,w=W*0.84,y=L.barY-4,h=L.barH+8;
+  const c=count(), cap=G.cfg.capacity, f=c/cap;
+  const x=W*0.08,w=W*0.84,y=L.barY-4,h=L.barH+8;
   if(!drawArt(SPR.ui.progress,x,y,w,h)){
     ctx.fillStyle='#a85e29'; rr(ctx,x,y,w,h,h/2); ctx.fill();
   }
@@ -1027,7 +1048,8 @@ function showResult(){
     if(!G.entry){ G.entry={s:G.score,t:Math.floor(G.time),n:G.served,d:Date.now()};
       progress.rank=(progress.rank||[]).concat(G.entry).sort((a,b)=>b.s-a.s||b.t-a.t).slice(0,10); save.set(progress); }
     const pos=progress.rank.indexOf(G.entry)+1;
-    return showCard(`<h2>${G.failReason==='lives'?'손님을 너무 많이 놓쳤어요':'벨트가 가득 찼어요'}</h2>
+    return showCard(`<h2>${G.failReason==='lives'?'손님을 너무 많이 놓쳤어요':'게임 오버'}</h2>
+      ${G.failReason==='full'?'<p>레일과 조리 대기열이 가득 찼어요.</p>':''}
       <div class="score">${G.score.toLocaleString()}<small>점</small></div>
       <p>생존 ${fmtTime(G.time)} · 손님 ${G.served}명 · ${pos?`<b>${pos}위</b>${pos===1?' 최고 기록!':''}`:'순위권 밖'}</p>${rankTable(G.entry)}
       <button class="btn" data-act="retry">다시 도전</button><button class="btn sub" data-act="title">모드 선택</button>`);
@@ -1037,7 +1059,7 @@ function showResult(){
     showCard(`<div class="stars">★ ★ ★</div><h2>STAGE ${G.stage} 클리어!</h2><p>손님 ${G.cfg.customers}명에게 초밥 ${G.total}개를 대접했어요.<br>기록 ${G.time.toFixed(1)}초${G.newBest?' · 최고 기록!':` · 최고 ${progress.best[G.stage]}초`}</p>
       ${last?'':'<button class="btn" data-act="next">다음 스테이지</button>'}<button class="btn sub" data-act="retry">다시 하기</button><button class="btn sub" data-act="title">스테이지 선택</button>`);
   }else{
-    showCard(`<h2>벨트가 가득 찼어요</h2><p>${G.delivered}/${G.total}개 전달. 손님이 원하는 재료부터 보내 보세요.</p>
+    showCard(`<h2>게임 오버</h2><p>레일과 조리 대기열이 가득 찼어요.<br>${G.delivered}/${G.total}개 전달</p>
       <button class="btn" data-act="retry">다시 도전</button><button class="btn sub" data-act="title">스테이지 선택</button>`);
   }
 }
