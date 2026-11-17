@@ -158,7 +158,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v0.6';
+const VERSION = 'v0.7';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 function stageConfig(n){
   return {
@@ -238,9 +238,10 @@ function solvable(st){
 // 무한 모드: 손님 k명째 기준 난이도
 function endlessCfg(k){
   return { types:Math.min(3+Math.floor(k/8),TYPE_ORDER.length), customers:0, orderMin:3, orderMax:Math.min(4+Math.floor(k/8),8),
-           capacity:18, mix:Math.min(1.2+k*0.03,3), loop:Math.max(5,11-k*0.04), spawnGap:0.9 };
+           capacity:18, mix:Math.min(1.2+k*0.03,3), loop:Math.max(END.loopMin,11-k*0.04), spawnGap:0.9 };
 }
-const patienceFor=(served,need)=>Math.max(5,42-served*0.3)+need*1.6;   // 손님 인내심(초)
+const END={patFloor:16,patPerNeed:1.6,loopMin:7};      // 무한 모드 난이도 상한(이 이상 어려워지지 않는다)
+const patienceFor=(served,need)=>Math.max(END.patFloor,42-served*0.3)+need*END.patPerNeed;   // 손님 인내심(초)
 const ENDLESS_ROWS=12;                  // 무한 모드에서 각 줄에 항상 쌓아 둘 재료 수
 // 손님 1명을 예약하고 그 주문만큼의 재료를 대기열(pool)에 넣는다.
 // 재료는 손님 순서(key)대로 줄 아래에 이어 붙으므로, 각 줄의 위쪽에는 항상 "곧 올 손님"의 재료가 온다.
@@ -846,7 +847,7 @@ function frame(t){
   draw();
   requestAnimationFrame(frame);
 }
-window.__game={ get G(){return G;}, buildVerified, buildStage, solvable, tapColumn, startStage, count, update };   // 디버그/테스트용
+window.__game={ get G(){return G;}, END, buildVerified, buildStage, solvable, tapColumn, startStage, count, update };   // 디버그/테스트용
 layout();
 const fontReady=(document.fonts&&document.fonts.load)?Promise.race([document.fonts.load('20px Jua').catch(()=>{}),new Promise(r=>setTimeout(r,1500))]):Promise.resolve();
 Promise.all([loadAssets(),fontReady]).then(()=>{ showTitle(); requestAnimationFrame(frame); });
