@@ -196,9 +196,8 @@
     46%{background-position:calc(200% / 3) 50%}
     53%{background-position:100% 50%}
     59%{background-position:0 100%}
-    66%,75%{background-position:calc(100% / 3) 100%}
-    71%{background-position:calc(200% / 3) 100%}
-    80%{background-position:calc(200% / 3) 100%}
+    66%{background-position:calc(100% / 3) 100%}
+    77%{background-position:calc(200% / 3) 100%}
     88%,100%{background-position:100% 100%}
   }
   @keyframes logoIn{from{transform:scale(.85) translateY(-10px);opacity:0}}
@@ -394,7 +393,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.5.1';
+const VERSION = 'v1.5.2';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1614,8 +1613,8 @@ function partyHat(x,y,s,tilt,seed){
   ctx.restore();
 }
 function idleFrame(frames,offset){
-  const time=G.time+offset, cycle=Math.floor(time/4.2), within=time%4.2;
-  const blinking=!reduceMotion.matches&&(within<0.13||(cycle%3===2&&within>=0.25&&within<0.36));
+  const within=(G.time+offset)%4.2;
+  const blinking=!reduceMotion.matches&&within<0.13;
   return (blinking&&frames?.blink)||frames?.idle;
 }
 
@@ -1628,12 +1627,11 @@ function drawSeat(i){
   const breathe=still?0:k*Math.sin(G.time*2.5+i*1.4);
   const y=p.y+(still?0:dir*(1-k)*cs*0.7-reaction*cs*0.06);
   const happy=(s.leaving&&!s.angry)||s.bump>0||s.waitDone;
-  const poseHappy=happy&&(still||s.bump<=0.8);
   ctx.save(); ctx.globalAlpha=k;
   const angry=s.angry||(s.patMax&&s.pat/s.patMax<0.25);
   const guest=SPR.guests[s.look.guest];
   const waiting=s.in>=1&&!s.leaving&&!happy;
-  const portrait=poseHappy?guest?.happy:angry?guest?.angry:waiting?idleFrame(guest,1.4+i*0.78):guest?.idle;
+  const portrait=happy?guest?.happy:angry?guest?.angry:waiting?idleFrame(guest,1.4+i*0.78):guest?.idle;
   const side=cs*1.23;
   if(s.kind==='vip'||s.kind==='rush'){                  // 특별 손님 후광
     const col=s.kind==='vip'?'255,206,70':'120,150,230', pul=0.55+0.25*Math.sin(G.time*5+i);
@@ -1644,7 +1642,7 @@ function drawSeat(i){
   // Keep the feet anchored as the portrait squashes and stretches.
   const width=side*(1-reaction*0.04), height=side*(1+reaction*0.06+breathe*0.012);
   if(!drawArt(portrait||guest?.idle,p.x-width/2,y-cs*0.58+side-height,width,height)){
-    drawPerson(p.x,y,cs,s.look,{happy:poseHappy,angry});
+    drawPerson(p.x,y,cs,s.look,{happy,angry});
   }
   if(s.grp) partyHat(p.x+(p.x<W/2?cs*0.08:-cs*0.08),y-cs*0.42,cs,p.x<W/2?-0.22:0.22,i);
   ctx.restore();
