@@ -183,11 +183,15 @@
   .lb-logo::before{content:'';position:absolute;inset:8% -6% 0;border-radius:50%;
     background:radial-gradient(closest-side,#ffe7b0d0,#ffc87a55 60%,#ffb34700)}
   .lb-logo .cat{position:relative;display:block;width:100%;aspect-ratio:320/240;
-    background:url('assets/restaurant/logo_cat.webp') 0 0/600% 100% no-repeat;animation:catEat 3s infinite;filter:drop-shadow(0 4px 5px #0006)}
-  /* 6프레임: 발견 → 깜짝 → 두 손 번쩍 → 덥석 → 냠 → 행복 */
-  @keyframes catEat{0%{background-position:0 0;animation-timing-function:step-end}24%{background-position:20% 0;animation-timing-function:step-end}
-    36%{background-position:40% 0;animation-timing-function:step-end}48%{background-position:60% 0;animation-timing-function:step-end}
-    58%{background-position:80% 0;animation-timing-function:step-end}72%{background-position:100% 0;animation-timing-function:step-end}100%{background-position:100% 0}}
+    background:url('assets/restaurant/logo_cat.webp') 0 0/600% 100% no-repeat;filter:drop-shadow(0 4px 5px #0006);
+    transform-origin:40% 95%;animation:catEat 1.5s infinite,catBob 1.5s ease-in-out infinite}
+  /* 6프레임: 발견 → 깜짝 → 두 손 번쩍 → 덥석 → 냠 → 행복. 프레임이 바뀔 때 살짝 뛰고 눌려서 부드럽게 이어진다 */
+  @keyframes catEat{0%{background-position:0 0;animation-timing-function:step-end}22%{background-position:20% 0;animation-timing-function:step-end}
+    33%{background-position:40% 0;animation-timing-function:step-end}44%{background-position:60% 0;animation-timing-function:step-end}
+    56%{background-position:80% 0;animation-timing-function:step-end}72%{background-position:100% 0;animation-timing-function:step-end}100%{background-position:100% 0}}
+  @keyframes catBob{0%,18%{transform:none}24%{transform:translateY(-1.5%) scale(1.01,.99)}
+    33%{transform:translateY(-4%) scale(.98,1.03)}42%{transform:translateY(-2%)}50%{transform:translateY(0) scale(1.03,.97)}
+    58%{transform:scale(1.02,.98)}64%{transform:scale(.99,1.01)}74%{transform:translateY(-2%) scale(1.01,.99)}86%,100%{transform:none}}
   @keyframes logoIn{from{transform:scale(.85) translateY(-10px);opacity:0}}
   .lb-tabs{flex:none;display:flex;gap:4px;margin:8px auto 10px;width:min(100%,380px);padding:4px;border-radius:999px;
     background:#3a2620e8;border:2px solid #e9bf73;box-shadow:0 3px 0 #1c110e,inset 0 2px 6px #0006}
@@ -374,7 +378,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.4.2';
+const VERSION = 'v1.4.3';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
