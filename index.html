@@ -379,7 +379,7 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.3.3';
+const VERSION = 'v1.3.4';
 const MAX_STAGE = 100, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
@@ -1207,7 +1207,7 @@ function drawOrder(s,p,cs){
   const x=p.bx, y=clamp(p.y-cs*0.05,B.minY+r*1.15,B.maxY-r*1.05);
   const t=reduceMotion.matches?1:clamp((G.time-s.orderAt)/0.28,0,1);
   const scale=1-0.26*(1-t)**2+0.18*Math.sin(Math.PI*t)*(1-t);
-  if(s.items.length>=2) return drawOrderCard(s,p,cs,t,scale);       // 2~3종은 세로 주문표
+  return drawOrderCard(s,p,cs,t,scale);       // 1~3종 모두 같은 세로 주문표
   ctx.save();
   ctx.globalAlpha*=0.65+t*0.35;
   ctx.translate(x,y+r*0.12*(1-t)); ctx.scale(scale,scale);
