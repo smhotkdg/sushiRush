@@ -393,12 +393,25 @@ function composeSushi(k){            // 밥 + 재료 + 얼굴을 합성한 초�
 /* =====================================================================
    2. 스테이지 데이터
    ===================================================================== */
-const VERSION = 'v1.5.2';
-const MAX_STAGE = 100, PAGE = 20, COLS = 5;
+const VERSION = 'v1.6';
+const MAX_STAGE = 300, PAGE = 20, COLS = 5;
 const MIN_RAIL_SLOTS = 18; // 투입 위치의 간격은 게이지 용량과 별개로 유지한다.
 const FIRST_ARRIVALS=[0.12,0.48,0.84,1.2], ARRIVE_TIME=0.20, LEAVE_TIME=0.44;
 const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
+// 1~100 은 그대로 두고, 101~300 은 hard(0→1)에 따라 손님 수·주문량·섞임·벨트 속도를 더 올리고 벨트 여유는 줄인다.
 function stageConfig(n){
+  if(n>100){
+    const base=stageConfig(100), h=clamp((n-100)/200,0,1);
+    return { ...base,
+      customers: 32 + Math.floor(h*16),                               // 32 → 48명
+      orderMin:  n>=180 ? 5 : 4,
+      orderMax:  8 + (n>=150?1:0) + (n>=230?1:0),                     // 8 → 10개
+      capacity:  base.capacity - Math.floor(h*5.2),                   // 18 → 13칸
+      mix:       base.mix + h*5.4,                                    // 5.6 → 11
+      loop:      base.loop - h*1.5,                                   // 7초 → 5.5초
+      spawnGap:  0.6 - h*0.15,
+      hard:      h };
+  }
   return {
     types:     Math.min(3 + Math.floor((n+1)/5), TYPE_ORDER.length), // 재료 종류 수
     customers: Math.min(6 + Math.floor(n*0.6), 32),                  // 손님 수
@@ -431,7 +444,8 @@ const EVENT_GAP=7;             // 특별 손님은 최소 이 손님 수만큼 �
 // 한 손님이 주문하는 초밥 종류 수의 확률 (진행도 p: 스테이지 번호 또는 무한 모드에서 응대한 손님 수)
 function kindsChance(p,endless){
   const a=endless?p:p*0.75;                     // 무한 모드는 조금 더 빨리 섞인다
-  return {two:clamp((a-10)/30,0,0.55), three:clamp((a-38)/40,0,0.4)};
+  const max3=endless?0.4:clamp(0.4+(p-100)/400,0.4,0.6);          // 101 스테이지부터 3종 주문이 더 잦아진다
+  return {two:clamp((a-10)/30,0,0.55), three:clamp((a-38)/40,0,max3)};
 }
 function makeOrder(types,cfg,progressN,endless,kind){
   const ch=kindsChance(progressN,endless), r=Math.random();
@@ -474,6 +488,9 @@ function makeGroup(types,cfg,progressN,endless){
   const c2={...cfg,orderMin:Math.max(2,cfg.orderMin-1),orderMax:Math.max(cfg.orderMin,cfg.orderMax-2)};
   return [0,1].map(()=>({items:makeOrder(types,c2,progressN,endless,'normal'),look:randomLook()}));
 }
+// 단체 손님이 앉을 두 번째 자리: 같은 줄 → 같은 쪽 → 대각선 순서로 빈자리를 찾는다(없으면 -1).
+// 짝 자리만 고집하면, 깊이 묻힌 재료를 기다리는 손님 둘이 서로 다른 줄에 앉아 있을 때 단체가 영영 못 앉아 판이 멈출 수 있다.
+function pairSeat(i,seats){ for(const j of [i^1,i^2,i^3]) if(!seats[j]) return j; return -1; }
 const entryItems=c=>c.group?c.members.flatMap(m=>m.items):c.items;
 function buildStage(n,mixScale=1){
   const cfg=stageConfig(n); cfg.mix*=mixScale; const types=TYPE_ORDER.slice(0,cfg.types);
@@ -520,8 +537,8 @@ function solvable(st){
       const s=seats[k];
       if(!s){
         if(!queue.length||--timer[k]>0) continue;
-        if(queue[0].group){                                      // 단체 손님은 짝 자리(0-1, 2-3)가 함께 비어야 앉는다
-          const j=k^1; if(seats[j]) continue;
+        if(queue[0].group){                                      // 단체 손님은 빈자리 두 곳에 함께 앉는다(같은 줄 우선)
+          const j=pairSeat(k,seats); if(j<0) continue;
           const g=queue.shift(), grp={members:g.members}; g.members.forEach((m,x)=>{ m.grp=grp; seats[x?j:k]=m; });
         } else seats[k]=queue.shift();
         continue;
@@ -587,8 +604,8 @@ function colTake(c,j=0){ const type=G.cols[c].splice(j,1)[0], gold=!!G.gold[c].s
 function colPut(c,type,gold=false,top=false){ if(top){ G.cols[c].unshift(type); G.gold[c].unshift(gold); } else { G.cols[c].push(type); G.gold[c].push(gold); } }
 const goldCount=()=>G.gold.reduce((a,g)=>a+g.filter(Boolean).length,0)+G.slots.filter(x=>x&&x.gold).length;
 function goldRoll(){ return G.endless&&G.gen>4&&goldCount()<1&&Math.random()<0.03; }
-function placeStageGold(n){                       // 스테이지: 4부터 1개, 30부터 2개 (위쪽 두 칸은 피한다)
-  const k=n<4?0:n<30?1:2, spots=[];
+function placeStageGold(n){                       // 스테이지: 4부터 1개, 30부터 2개, 150부터 3개 (위쪽 두 칸은 피한다)
+  const k=n<4?0:n<30?1:n<150?2:3, spots=[];
   G.cols.forEach((col,c)=>col.forEach((_,j)=>{ if(j>=2) spots.push([c,j]); }));
   for(let t=0;t<k&&spots.length;t++){ const [c,j]=spots.splice(rnd(0,spots.length-1),1)[0]; G.gold[c][j]=true; }
 }
@@ -599,7 +616,11 @@ function refill(){                       // 가장 짧은 줄이 ENDLESS_ROWS �
 // 막힘 방지(0.5초마다): 앉아 있는 손님이 원하는 초밥이 벨트로 오는 중이 아닌데
 // 그 재료가 너무 깊이 묻혀 있거나(여유 있을 땐 3칸, 인내심이 절반 아래면 1칸 초과)
 // 벨트 여유 안에서 꺼낼 수 없으면, 가장 가까운 것을 그 줄의 맨 위로 끌어올린다.
-function unblock(){
+function unblock(stage=false){
+  if(stage){                                                 // 스테이지는 정말 멈췄을 때만: 조리·비행 중인 재료가 없고 벨트에 앉은 손님이 원하는 초밥도 없을 때
+    if(G.flying.length||G.ingredients.length||G.ready!==null) return;
+    if(G.slots.some(x=>x&&G.seats.some(s=>s&&!s.leaving&&wantsType(s,x.type)))) return;
+  }
   const have={};
   for(const x of G.slots) if(x) have[x.type]=(have[x.type]||0)+1;
   if(G.ready!==null) have[G.ready]=(have[G.ready]||0)+1;
@@ -611,7 +632,7 @@ function unblock(){
     const missing=s.items.filter(it=>it.need>0&&!have[it.type]).map(it=>it.type);
     let best=-1, bd=1e9;
     for(let c=0;c<COLS;c++){ const d=G.cols[c].findIndex(x=>missing.includes(x)); if(d>=0&&d<bd){ bd=d; best=c; } }
-    const limit=s.pat/s.patMax<0.5?1:3;
+    const limit=stage?1e9:s.pat/s.patMax<0.5?1:3;              // 스테이지: 벨트가 넘치지 않고 꺼낼 수 있으면 그대로 둔다
     if(best<0||(bd<=limit&&bd+1<=free)) continue;           // 충분히 가까이 있다
     const x=colTake(best,bd); colPut(best,x.type,x.gold,true); G.rescues++;
     const lane=L.lanes[best]; ring(lane.x,L.rowTop,lane.w*0.7,'#ffc83d'); burst(lane.x,L.rowTop,6,{shape:'star',colors:['#ffc83d','#fff'],speed:120,size:7,life:0.5});
@@ -1195,6 +1216,7 @@ function update(dt){
     if(G.state==='clear'){ G.confT-=dt; if(G.confT<=0){ G.confT=0.09; burst(Math.random()*W,-10,5,{shape:'rect',speed:90,g:420,life:1.6,size:9}); } }
     G.endT-=dt; if(G.endT<=0&&!overlayShown()) showResult(); return;
   }
+  if(!G.endless){ G.stallT=(G.stallT??0.5)-dt; if(G.stallT<=0){ G.stallT=0.5; unblock(true); } }   // 스테이지 막힘 방지(정말 꺼낼 수 없을 때만)
   if(G.endless){
     G.cfg.loop=endlessCfg(G.served).loop; refill();
     G.stallT-=dt; if(G.stallT<=0){ G.stallT=0.5; unblock(); }
@@ -1232,8 +1254,8 @@ function update(dt){
       G.seatTimer[i]-=dt*RX;
       if(G.seatTimer[i]>0) continue;
       const head=G.queue[0];
-      if(head.group){                                    // 단체 손님: 짝 자리(0-1, 2-3)가 함께 비었을 때만 둘이 같이 앉는다
-        const j=i^1; if(G.seats[j]) continue;
+      if(head.group){                                    // 단체 손님: 빈자리 두 곳에 둘이 같이 앉는다(같은 줄 우선)
+        const j=pairSeat(i,G.seats); if(j<0) continue;
         G.queue.shift();
         const grp={members:[],earned:0,need:orderNeed(head)};
         if(G.endless) grp.patMax=grp.pat=patienceFor(G.served,grp.need)*0.85;
@@ -1249,7 +1271,7 @@ function update(dt){
       const need=orderNeed(c);
       const guest={items:c.items.map(it=>({...it})),need,kind:c.kind||'normal',look:c.look,in:0,out:0,leaving:false,bump:0,earned:0};
       if(G.endless) guest.patMax=guest.pat=patienceFor(G.served,need)*(guest.kind==='rush'?0.5:guest.kind==='vip'?1.2:1);
-      else if(guest.kind==='rush') guest.patMax=guest.pat=12+need*2.5;      // 스테이지: 급한 손님만 시간 제한
+      else if(guest.kind==='rush') guest.patMax=guest.pat=(12+need*2.5)*(1-(G.cfg.hard||0)*0.3);      // 스테이지: 급한 손님만 시간 제한
       G.seats[i]=guest;
       continue;
     }
@@ -1582,23 +1604,31 @@ function drawGroupLinks(){
   for(let i=0;i<4;i++){
     const s=G.seats[i]; if(!s||!s.grp||done.has(s.grp)||s.leaving||s.in<1) continue; done.add(s.grp);
     const a=L.seat[s.grp.seats[0]], b=L.seat[s.grp.seats[1]], cs=L.cs;
+    if(a.top!==b.top){                                    // 서로 다른 줄: 리본 대신 각자 옆에 "단체" 표
+      const t=s.grp.members.some(m=>m.waitDone)?'한 명 더!':'단체';
+      for(const q of [a,b]) groupPill(q.x+(q.x<W/2?cs*0.62:-cs*0.62),q.y+cs*0.3,t);
+      continue;
+    }
     const y=a.top?a.y+cs*0.05:a.y+cs*0.1, x0=a.x+cs*0.38, x1=b.x-cs*0.38, mx=(a.x+b.x)/2;
     const sag=cs*0.12+Math.sin(G.time*3)*cs*0.02;
     ctx.save(); ctx.lineCap='round';
     ctx.strokeStyle='#2a9480'; ctx.lineWidth=Math.max(3,cs*0.07);
     ctx.beginPath(); ctx.moveTo(x0,y); ctx.quadraticCurveTo(mx,y+sag*2,x1,y); ctx.stroke();
     ctx.strokeStyle='#bff0e3'; ctx.lineWidth=Math.max(1,cs*0.025); ctx.setLineDash([cs*0.06,cs*0.06]); ctx.stroke(); ctx.setLineDash([]);
-    const waiting=s.grp.members.some(m=>m.waitDone), t=waiting?'한 명 더!':'단체';
-    const fs=clamp(cs*0.22,11,15); ctx.font=`${fs}px ${POP_FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    const tw=ctx.measureText(t).width+fs*1.1, ty=y+sag, h=fs*1.45;
-    ctx.fillStyle='rgba(30,70,60,.25)'; rr(ctx,mx-tw/2,ty-h/2+2,tw,h,h/2); ctx.fill();
-    const g=ctx.createLinearGradient(0,ty-h/2,0,ty+h/2); g.addColorStop(0,'#5ec4ae'); g.addColorStop(1,'#2a9480');
-    ctx.fillStyle=g; rr(ctx,mx-tw/2,ty-h/2,tw,h,h/2); ctx.fill();
-    ctx.strokeStyle='#e6fff8'; ctx.lineWidth=1.3; rr(ctx,mx-tw/2+2,ty-h/2+2,tw-4,h-4,h/2-2); ctx.stroke();
-    ctx.strokeStyle='#1d5f53'; ctx.lineWidth=fs*0.2; ctx.lineJoin='round'; ctx.strokeText(t,mx,ty+1);
-    ctx.fillStyle='#fff'; ctx.fillText(t,mx,ty+1);
     ctx.restore();
+    groupPill(mx,y+sag,s.grp.members.some(m=>m.waitDone)?'한 명 더!':'단체');
   }
+}
+function groupPill(mx,ty,t){
+  const fs=clamp(L.cs*0.22,11,15); ctx.save(); ctx.font=`${fs}px ${POP_FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  const tw=ctx.measureText(t).width+fs*1.1, h=fs*1.45;
+  ctx.fillStyle='rgba(30,70,60,.25)'; rr(ctx,mx-tw/2,ty-h/2+2,tw,h,h/2); ctx.fill();
+  const g=ctx.createLinearGradient(0,ty-h/2,0,ty+h/2); g.addColorStop(0,'#5ec4ae'); g.addColorStop(1,'#2a9480');
+  ctx.fillStyle=g; rr(ctx,mx-tw/2,ty-h/2,tw,h,h/2); ctx.fill();
+  ctx.strokeStyle='#e6fff8'; ctx.lineWidth=1.3; rr(ctx,mx-tw/2+2,ty-h/2+2,tw-4,h-4,h/2-2); ctx.stroke();
+  ctx.strokeStyle='#1d5f53'; ctx.lineWidth=fs*0.2; ctx.lineJoin='round'; ctx.strokeText(t,mx,ty+1);
+  ctx.fillStyle='#fff'; ctx.fillText(t,mx,ty+1);
+  ctx.restore();
 }
 // 단체 손님 고깔모자
 function partyHat(x,y,s,tilt,seed){
